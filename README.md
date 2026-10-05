@@ -98,7 +98,7 @@
 | **Netia Online** | Internet & Fiber (`netiaonline.pl`) | `INTERNET` | Playwright Scraper | ✅ Production |
 | **Euro-lan BOK** | Local ISP (`bok.euro-lan.pl`) | `INTERNET` | Playwright Scraper | ✅ Production |
 | **e-kartoteka** | Housing Community / Spółdzielnia | `HOUSING` | Playwright API / Scraper | ✅ Production |
-| **Email Ingestion (GAS)** | Canal+, Orange, Play, InPost, etc. | `TELECOM` / `OTHER` | Webhook (Gmail AppScript) | ✅ Production |
+| **Email Ingestion (GAS)** | Canal+, Orange, Play, T-Mobile, Vectra | `TELECOM` / `OTHER` | Webhook (Gmail AppScript) | ✅ Production |
 | **Mock Provider** | Development & Demo Sandbox | `OTHER` | Synthetic PDF Generator | ✅ Testing |
 
 ---
