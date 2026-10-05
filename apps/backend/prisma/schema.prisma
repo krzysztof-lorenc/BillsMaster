@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum SyncStatus {
+  IDLE
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+  NEEDS_REAUTH
+}
+
+enum BillStatus {
+  PAID
+  UNPAID
+  OVERDUE
+  PROCESSING
+}
+
+model User {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  passwordHash String      @map("password_hash")
+  name         String
+  role         Role        @default(USER)
+  isActive     Boolean     @default(true) @map("is_active")
+  theme        String      @default("dark")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  groups       UserGroup[]
+
+  @@map("users")
+}
+
+model Provider {
+  id        String   @id // e.g. "tauron", "mock-provider"
+  name      String   // e.g. "Tauron eBOK", "Demo Mock Portal"
+  category  String   // e.g. "ELECTRICITY", "GAS", "INTERNET"
+  loginUrl  String   @map("login_url")
+  isEnabled Boolean  @default(true) @map("is_enabled")
+  iconUrl   String?  @map("icon_url")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  portals   Portal[]
+
+  @@map("providers")
+}
+
+model Group {
+  id          String        @id @default(uuid())
+  name        String        @unique
+  description String?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  users       UserGroup[]
+  portals     GroupPortal[]
+
+  @@map("groups")
+}
+
+model UserGroup {
+  userId    String   @map("user_id")
+  groupId   String   @map("group_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([userId, groupId])
+  @@map("user_groups")
+}
+
+model Portal {
+  id               String       @id @default(uuid())
+  name             String       // e.g. "Energia Dom", "Internet Światłowód"
+  providerId       String       @map("provider_id")
+  login            String       // utility account username/login
+  encryptedPass    String       @map("encrypted_pass")
+  iv               String       @default("")
+  authTag          String       @default("") @map("auth_tag")
+  sessionStatePath String?      @map("session_state_path")
+  agreementFilter  String?      @map("agreement_filter")
+  syncFrequency    Int          @default(1) @map("sync_frequency")
+  isEnabled        Boolean      @default(true) @map("is_enabled")
+  isMailScript     Boolean      @default(false) @map("is_mail_script")
+  senderFilter     String?      @map("sender_filter")
+  titleFilter      String?      @map("title_filter")
+  customCategory   String?      @map("custom_category")
+  lastSyncStatus   SyncStatus   @default(IDLE) @map("last_sync_status")
+  lastSyncMessage  String?      @map("last_sync_message")
+  lastSyncedAt     DateTime?    @map("last_synced_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  provider         Provider     @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  groups           GroupPortal[]
+  bills            Bill[]
+  syncJobs         SyncJob[]
+
+  @@map("portals")
+}
+
+model GroupPortal {
+  groupId   String   @map("group_id")
+  portalId  String   @map("portal_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  portal    Portal   @relation(fields: [portalId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, portalId])
+  @@map("group_portals")
+}
+
+model Bill {
+  id                String      @id @default(uuid())
+  portalId          String      @map("portal_id")
+  
+  invoiceNumber     String      @map("invoice_number")
+  amountDue         Decimal     @map("amount_due") @db.Decimal(10, 2)
+  currency          String      @default("PLN")
+  issueDate         DateTime    @map("issue_date")
+  dueDate           DateTime    @map("due_date")
+  paymentStatus     BillStatus  @default(UNPAID) @map("payment_status")
+  
+  bankAccountNumber String?     @map("bank_account_number")
+  paymentTitle      String?     @map("payment_title")
+  
+  pdfFileName       String?     @map("pdf_file_name")
+  pdfFilePath       String?     @map("pdf_file_path")
+  pdfFileSize       Int?        @map("pdf_file_size")
+
+  rawMetadata       Json?       @map("raw_metadata")
+
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  portal            Portal      @relation(fields: [portalId], references: [id], onDelete: Cascade)
+
+  @@unique([portalId, invoiceNumber])
+  @@map("bills")
+}
+
+model SyncJob {
+  id            String      @id @default(uuid())
+  portalId      String      @map("portal_id")
+  status        SyncStatus  @default(QUEUED)
+  startedAt     DateTime?   @map("started_at")
+  finishedAt    DateTime?   @map("finished_at")
+  billsFound    Int         @default(0) @map("bills_found")
+  billsImported Int         @default(0) @map("bills_imported")
+  errorMessage  String?     @map("error_message")
+  logs          Json?
+
+  portal        Portal      @relation(fields: [portalId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@map("sync_jobs")
+}
+
+model MailScriptConfig {
+  id                     String    @id @default("default")
+  endpointUrl            String    @default("") @map("endpoint_url")
+  gasWebAppUrl           String?   @map("gas_web_app_url")
+  secretToken            String    @unique @map("secret_token")
+  lastRunDate            DateTime? @map("last_run_date")
+  lastRunStatus          String?   @map("last_run_status")
+  lastRunMessage         String?   @map("last_run_message")
+  lastRunCount           Int       @default(0) @map("last_run_count")
+  scriptAcknowledgedHash String    @default("") @map("script_acknowledged_hash")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  @@map("mail_script_configs")
+}

@@ -1,0 +1,409 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+  }
+
+  html {
+    font-size: 16px;
+  }
+
+  html.senior-text-large {
+    font-size: 18px;
+  }
+
+  body {
+    @apply bg-slate-950 text-slate-100;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  /* High contrast focus ring for accessibility */
+  *:focus-visible {
+    outline: 3px solid #38bdf8;
+    outline-offset: 3px;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* ==========================================================================
+   LIGHT THEME DESIGN SYSTEM (BillsMaster Light Mode)
+   Activated when <html class="light"> is present.
+   Persisted per user in PostgreSQL & local storage.
+   ========================================================================== */
+
+html.light {
+  color-scheme: light;
+}
+
+html.light body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Focus ring in light mode */
+html.light *:focus-visible {
+  outline: 3px solid #2563eb !important;
+  outline-offset: 3px;
+}
+
+/* Neutralize dark gradients on cards, containers, and badges */
+html.light [class*="from-amber-950"],
+html.light [class*="from-rose-950"],
+html.light [class*="from-slate-950"],
+html.light [class*="from-blue-950"],
+html.light [class*="from-indigo-950"],
+html.light [class*="from-emerald-950"] {
+  background-image: none !important;
+}
+
+/* Surface containers (Cards, Modals, Dropdowns) */
+html.light .bg-slate-900,
+html.light [class*="bg-slate-900"]:not(.bg-blue-600):not(.bg-indigo-600) {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-slate-900\/95 {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+}
+
+/* Secondary controls & panels */
+html.light .bg-slate-800,
+html.light [class*="bg-slate-800"]:not(.bg-blue-600):not(.bg-indigo-600) {
+  background-color: #f1f5f9 !important;
+}
+
+/* Sub-panels and details */
+html.light .bg-slate-950,
+html.light [class*="bg-slate-950"] {
+  background-color: #f8fafc !important;
+}
+
+html.light .bg-slate-700 {
+  background-color: #e2e8f0 !important;
+}
+
+/* Soft status background tints in light mode */
+html.light [class*="bg-amber-950"] {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+}
+html.light [class*="bg-rose-950"] {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
+}
+html.light [class*="bg-emerald-950"] {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #065f46 !important;
+}
+html.light [class*="bg-blue-950"] {
+  background-color: #eff6ff !important;
+  border-color: #bfdbfe !important;
+  color: #1e40af !important;
+}
+html.light [class*="bg-indigo-950"] {
+  background-color: #eef2ff !important;
+  border-color: #c7d2fe !important;
+  color: #3730a3 !important;
+}
+
+/* Header & Footer */
+html.light header {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+html.light footer {
+  background-color: #ffffff !important;
+  border-top-color: #e2e8f0 !important;
+}
+
+/* Modal dark overlay in light mode */
+html.light .fixed.inset-0.bg-slate-950\/80,
+html.light .fixed.inset-0.bg-black\/70,
+html.light .fixed.inset-0.bg-slate-950\/90 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+
+/* Borders */
+html.light .border-slate-950,
+html.light .border-slate-900,
+html.light [class*="border-slate-800"] {
+  border-color: #e2e8f0 !important;
+}
+
+html.light [class*="border-slate-700"] {
+  border-color: #cbd5e1 !important;
+}
+
+html.light [class*="border-slate-600"] {
+  border-color: #94a3b8 !important;
+}
+
+/* Interactive Hovers */
+html.light .hover\:bg-slate-800:hover,
+html.light [class*="hover:bg-slate-800"]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+html.light .hover\:bg-slate-700:hover,
+html.light [class*="hover:bg-slate-700"]:hover {
+  background-color: #cbd5e1 !important;
+}
+
+html.light .hover\:bg-slate-900:hover {
+  background-color: #f8fafc !important;
+}
+
+html.light .hover\:border-slate-700:hover {
+  border-color: #94a3b8 !important;
+}
+
+html.light .hover\:border-slate-600:hover {
+  border-color: #64748b !important;
+}
+
+/* Text on secondary slate buttons in light mode */
+html.light button[class*="bg-slate-800"],
+html.light [class*="bg-slate-800"] button {
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+html.light button[class*="bg-slate-800"]:hover,
+html.light [class*="bg-slate-800"] button:hover {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Active copied button */
+html.light .bg-emerald-600,
+html.light button.bg-emerald-600 {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+  border-color: #059669 !important;
+}
+
+/* Text Hierarchy */
+html.light .text-slate-100 {
+  color: #0f172a !important;
+}
+
+html.light .text-slate-200 {
+  color: #1e293b !important;
+}
+
+html.light .text-slate-300 {
+  color: #475569 !important;
+}
+
+html.light .text-slate-400 {
+  color: #64748b !important;
+}
+
+html.light .text-slate-500 {
+  color: #64748b !important;
+}
+
+html.light h1,
+html.light h2,
+html.light h3,
+html.light h4,
+html.light h5,
+html.light h6,
+html.light th {
+  color: #0f172a !important;
+}
+
+/* General text-white override EXCEPT on primary colored buttons, badges, gradients */
+html.light .text-white:not(.bg-blue-600):not(.bg-blue-500):not(.bg-indigo-600):not(.bg-indigo-500):not(.bg-emerald-600):not(.bg-emerald-500):not(.bg-rose-600):not(.bg-rose-500):not(.bg-amber-500):not(.bg-amber-600):not(.bg-gradient-to-tr):not(.bg-gradient-to-r):not(.bg-blue-600 *):not(.bg-blue-500 *):not(.bg-indigo-600 *):not(.bg-indigo-500 *):not(.bg-emerald-600 *):not(.bg-emerald-500 *):not(.bg-rose-600 *):not(.bg-rose-500 *):not(.bg-gradient-to-tr *):not(.bg-gradient-to-r *) {
+  color: #0f172a !important;
+}
+
+html.light .hover\:text-white:hover:not(.bg-blue-600 *):not(.bg-indigo-600 *):not(.bg-emerald-600 *):not(.bg-rose-600 *) {
+  color: #0284c7 !important;
+}
+
+/* High-contrast status accents for light backgrounds */
+html.light .text-emerald-400 {
+  color: #059669 !important;
+}
+html.light .text-emerald-300 {
+  color: #047857 !important;
+}
+html.light .text-amber-400 {
+  color: #d97706 !important;
+}
+html.light .text-amber-300 {
+  color: #b45309 !important;
+}
+html.light .text-yellow-400 {
+  color: #ca8a04 !important;
+}
+html.light .text-sky-400 {
+  color: #0284c7 !important;
+}
+html.light .text-sky-300 {
+  color: #0369a1 !important;
+}
+html.light .text-blue-400 {
+  color: #2563eb !important;
+}
+html.light .text-blue-300 {
+  color: #1d4ed8 !important;
+}
+html.light .text-indigo-400 {
+  color: #4f46e5 !important;
+}
+html.light .text-indigo-300 {
+  color: #4338ca !important;
+}
+html.light .text-rose-400 {
+  color: #e11d48 !important;
+}
+html.light .text-rose-300 {
+  color: #be123c !important;
+}
+
+/* Pastel Badge Tints */
+html.light .bg-emerald-500\/10 {
+  background-color: #ecfdf5 !important;
+}
+html.light .bg-emerald-500\/20 {
+  background-color: #d1fae5 !important;
+}
+html.light .border-emerald-500\/20,
+html.light .border-emerald-500\/30,
+html.light .border-emerald-500\/40 {
+  border-color: #a7f3d0 !important;
+}
+
+html.light .bg-amber-500\/10 {
+  background-color: #fffbeb !important;
+}
+html.light .bg-amber-500\/20 {
+  background-color: #fef3c7 !important;
+}
+html.light .border-amber-500\/20,
+html.light .border-amber-500\/30,
+html.light .border-amber-500\/40,
+html.light .border-amber-500\/60 {
+  border-color: #fde68a !important;
+}
+
+html.light .bg-rose-500\/10 {
+  background-color: #fff1f2 !important;
+}
+html.light .bg-rose-500\/20 {
+  background-color: #ffe4e6 !important;
+}
+html.light .border-rose-500\/20,
+html.light .border-rose-500\/30,
+html.light .border-rose-500\/40,
+html.light .border-rose-600\/80 {
+  border-color: #fecdd3 !important;
+}
+
+html.light .bg-blue-500\/10 {
+  background-color: #eff6ff !important;
+}
+html.light .bg-blue-500\/20 {
+  background-color: #dbeafe !important;
+}
+html.light .border-blue-500\/20,
+html.light .border-blue-500\/30,
+html.light .border-blue-500\/40 {
+  border-color: #bfdbfe !important;
+}
+
+html.light .bg-indigo-500\/10 {
+  background-color: #eef2ff !important;
+}
+html.light .border-indigo-500\/20,
+html.light .border-indigo-500\/30 {
+  border-color: #c7d2fe !important;
+}
+
+html.light .bg-rose-950\/60 {
+  background-color: #ffe4e6 !important;
+  border-color: #fda4af !important;
+  color: #be123c !important;
+}
+
+/* Form Inputs & Controls */
+html.light input:not([type="checkbox"]):not([type="radio"]),
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html.light input:focus,
+html.light select:focus,
+html.light textarea:focus {
+  border-color: #3b82f6 !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder,
+html.light select::placeholder,
+html.light .placeholder-slate-400::placeholder,
+html.light .placeholder-slate-500::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Shadows */
+html.light .shadow-2xl {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.light .shadow-xl {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -4px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.light .shadow-lg {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.light .shadow-md {
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.light .shadow-inner {
+  box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Scrollbar for light mode */
+html.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

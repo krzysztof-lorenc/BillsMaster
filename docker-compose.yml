@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: billsmaster-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: billsmaster
+      POSTGRES_PASSWORD: billsmaster_pass
+      POSTGRES_DB: billsmaster
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U billsmaster -d billsmaster"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: billsmaster-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: billsmaster-backend
+    restart: unless-stopped
+    command: sh -c "cd /app/apps/backend && npx prisma db push && cd /app && node apps/backend/dist/index.js"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 3005
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      DATABASE_URL: postgresql://billsmaster:billsmaster_pass@postgres:5432/billsmaster?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-billsmaster-super-secret-jwt-token-key-2026-secure}
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      STORAGE_DIR: /app/storage
+      PLAYWRIGHT_HEADLESS: "true"
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:5173}
+    ports:
+      - "3005:3005"
+    volumes:
+      - app_storage:/app/storage
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    container_name: billsmaster-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_storage:

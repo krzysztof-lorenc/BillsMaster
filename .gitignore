@@ -1,0 +1,22 @@
+node_modules
+dist
+.env
+*.log
+.DS_Store
+
+# Storage volumes
+**/storage/invoices/*
+!**/storage/invoices/.gitkeep
+**/storage/sessions/*
+!**/storage/sessions/.gitkeep
+**/storage/data/*
+!**/storage/data/.gitkeep
+
+# Playwright & test outputs
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Coverage
+coverage/
