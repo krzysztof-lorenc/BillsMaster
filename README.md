@@ -1,127 +1,246 @@
-# BillsMaster — Centralized Billing & Utility Payment Center
+<div align="center">
 
-BillsMaster is a self-hosted billing management center. It automatically logs into defined utility portals (electricity, gas, telco, etc.), parses current and historical billing information, downloads and stores original PDF invoices, and presents everything in a Progressive Web App (PWA) installable directly from your browser on desktop and mobile.
+# ⚡ BillsMaster
+### Self-Hosted Utility Billing & Payment Center
+
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](docker-compose.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.4-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![Fastify](https://img.shields.io/badge/Fastify-4.x-000000?style=for-the-badge&logo=fastify&logoColor=white)](https://fastify.dev/)
+[![Playwright](https://img.shields.io/badge/Playwright-Chromium-2EAD33?style=for-the-badge&logo=playwright&logoColor=white)](https://playwright.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
+
+<p align="center">
+  <b>BillsMaster</b> automatically collects, tracks, and archives all your household and business utility bills (electricity, gas, water, housing, internet, TV) in one centralized, self-hosted web app with mobile-friendly Polish banking QR payments.
+</p>
+
+[Key Features](#-key-features) •
+[Screenshots](#-screenshots) •
+[Supported Providers](#-supported-providers) •
+[Quickstart](#-quickstart-with-docker-compose) •
+[Architecture](#-architecture) •
+[Security](#-security--encryption)
+
+</div>
 
 ---
 
-## Key Features
+## 📱 Screenshots
 
-- **Automated Headless Portal Scraping:** Powered by Playwright Chromium with persistent session state/cookies to prevent repeated logins.
-- **Provider Plugin Architecture:** Extensible `IBillProvider` interface. Ships with:
-  - **Tauron eBOK:** Automated login, session persistence, invoice row extraction, and PDF downloads.
-  - **Demo Mock Portal:** Realistic testing and development provider with dynamic PDF invoice generation.
-- **Progressive Web App (PWA):** Built with React 19, Vite, and Tailwind CSS. Installable via browser "Install App" button, with offline caching and responsive mobile/desktop layouts.
-- **Real-Time Live Sync Updates:** BullMQ worker pool streams step-by-step progress to the UI via WebSockets.
-- **Strong Security at Rest:** External portal passwords encrypted with **AES-256-GCM** authenticated envelope encryption; user passwords hashed with bcrypt; session protected via HTTP-only JWT cookies.
-- **Role-Based Access Control:**
-  - **Admin Account:** First-run wizard to create the initial admin; Admin console to create and manage users.
-  - **User Accounts:** Users can connect multiple provider accounts with distinct credentials.
-- **Document Archive:** Downloads and archives original PDF invoices on the local filesystem with in-app preview/download.
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="50%">
+        <img src="docs/screenshots/dashboard-mobile.png" alt="BillsMaster Mobile Dashboard" width="340" />
+        <br />
+        <b>Mobile Dashboard</b>
+        <br />
+        <i>Multi-property filters (Lokale / Grupy), quick search, due countdowns & invoice cards</i>
+      </td>
+      <td align="center" width="50%">
+        <img src="docs/screenshots/payment-qr-modal.png" alt="Polish Bank QR Code Payment Modal" width="340" />
+        <br />
+        <b>Instant QR Code Payment (Standard ZBP)</b>
+        <br />
+        <i>Scan & pay with any Polish banking app (mBank, PKO BP, Santander, ING, Millennium, etc.)</i>
+      </td>
+    </tr>
+  </table>
+</div>
 
 ---
 
-## Monorepo Layout
+## ✨ Key Features
 
+* 🤖 **Headless Web Scraping via Playwright:**
+  * Fully automated logins to Polish utility eBOK portals using headless Chromium.
+  * Preserves authenticated browser session cookies to minimize CAPTCHAs and repeated logins.
+  * Downloads original high-resolution PDF invoices straight into an encrypted local archive.
+
+* 📲 **ZBP Standard QR Payments (Płatność kodem QR):**
+  * Generates compliant Polish Banking Association (**ZBP — Związek Banków Polskich**) payment QR codes.
+  * Instant scan & pay in mobile banking apps (PKO BP, mBank, Santander, ING, Millennium, Pekao, Alior, etc.).
+  * Validates IBAN / NRB modulo-97 checksums and detects bank names in real-time.
+  * Export options: Download PNG, native Web Share, or copy raw ZBP transfer string.
+
+* 🏠 **Multi-Property Grouping (Grupy / Lokale):**
+  * Organize accounts and bills across multiple locations (e.g. *Mieszkanie*, *Garaże*, *Domek letniskowy*, *Firma*).
+  * Filter dashboards and calculate due totals per property with a single click.
+
+* 📧 **Gmail / Google Apps Script Ingestion:**
+  * Built-in Google Apps Script webhook integration for bills received via email (Canal+, Orange, Play, etc.).
+  * Automatically extracts payment amounts, due dates, IBANs, and attachments from incoming emails.
+
+* 🔄 **Live Sync & Real-Time Monitoring:**
+  * High-performance background queueing powered by **BullMQ** & **Redis**.
+  * Real-time sync progress, steps, and percentage indicators streamed to the UI via **WebSockets**.
+  * Smart Error Classifier diagnostics with actionable hints in Polish.
+
+* 🌙 **Installable Progressive Web App (PWA):**
+  * Modern, dark-first UI built with React 19, Vite, and Tailwind CSS.
+  * Installable directly on Android, iOS, Windows, and macOS home screens.
+  * Integrated in-app PDF invoice viewer with page navigation and zoom.
+
+* 🔒 **Military-Grade Security:**
+  * Portal passwords encrypted at rest with authenticated **AES-256-GCM** envelope encryption.
+  * User credentials hashed with **bcrypt**.
+  * Session authorization secured with HTTP-only, secure JWT cookies.
+
+---
+
+## 🔌 Supported Providers
+
+| Provider | Type | Category | Method | Status |
+| :--- | :--- | :--- | :--- | :---: |
+| **Tauron eBOK** | Electricity (`moj.tauron.pl`) | `ENERGY` | Playwright Scraper | ✅ Production |
+| **myORLEN (PGNiG)** | Gas (`ebok.myorlen.pl`) | `GAS` | Playwright Scraper | ✅ Production |
+| **AQUA Bielsko-Biała** | Water & Sewage (`ebok.aqua.com.pl`) | `WATER` | Playwright Scraper | ✅ Production |
+| **Netia Online** | Internet & Fiber (`netiaonline.pl`) | `INTERNET` | Playwright Scraper | ✅ Production |
+| **Euro-lan BOK** | Local ISP (`bok.euro-lan.pl`) | `INTERNET` | Playwright Scraper | ✅ Production |
+| **e-kartoteka** | Housing Community / Spółdzielnia | `HOUSING` | Playwright API / Scraper | ✅ Production |
+| **Email Ingestion (GAS)** | Canal+, Orange, Play, InPost, etc. | `TELECOM` / `OTHER` | Webhook (Gmail AppScript) | ✅ Production |
+| **Mock Provider** | Development & Demo Sandbox | `OTHER` | Synthetic PDF Generator | ✅ Testing |
+
+---
+
+## 🚀 Quickstart with Docker Compose
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/<your-username>/BillsMaster.git
+cd BillsMaster
 ```
-BillsMaster/
-├── docker-compose.yml              # Production orchestration (Postgres, Redis, Backend, Frontend)
-├── .env.example                    # Environment template
-│
-├── apps/
-│   ├── backend/                    # Node.js + Fastify + Prisma + BullMQ + Playwright
-│   │   ├── Dockerfile
-│   │   ├── prisma/schema.prisma    # PostgreSQL data models
-│   │   └── src/
-│   │       ├── security/           # AES-256-GCM CryptoService & bcrypt
-│   │       ├── providers/          # TauronProvider & MockProvider
-│   │       ├── queue/              # BullMQ queue & Playwright scraper worker
-│   │       └── ws/                 # WebSocket progress stream
-│   │
-│   └── frontend/                   # React 19 + Vite + Tailwind CSS + shadcn + PWA
-│       ├── Dockerfile
-│       ├── nginx.conf              # SPA & reverse proxy configuration
-│       └── src/
-│           ├── components/         # PWA install button, Navbar, modals
-│           ├── pages/              # Dashboard, Bills, Accounts, Admin, Login, Setup
-│           └── hooks/              # useSyncStream WebSocket hook
-│
-├── packages/
-│   └── shared-types/               # Shared TypeScript definitions
-└── storage/                        # Persistent volumes for invoices and sessions
-```
 
----
-
-## Quickstart with Docker Compose
-
-### 1. Configure Environment
-Copy `.env.example` to `.env`:
+### 2. Configure Environment
+Copy [.env.example](.env.example) to `.env`:
 ```bash
 cp .env.example .env
 ```
-Generate a secure 64-hex-character string for `MASTER_ENCRYPTION_KEY`:
+
+Generate a secure 64-character hex key (32 bytes) for `MASTER_ENCRYPTION_KEY`:
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
-Place this key and a secure `JWT_SECRET` in `.env`.
 
-### 2. Launch Services
-Start all containers (PostgreSQL, Redis, Backend, and Frontend):
-```bash
-docker-compose up -d --build
+Fill in `MASTER_ENCRYPTION_KEY` and a random `JWT_SECRET` in `.env`:
+```env
+MASTER_ENCRYPTION_KEY=your_generated_64_hex_key_here
+JWT_SECRET=your_jwt_secret_token_here
+PUBLIC_URL=http://localhost:3000
 ```
 
-### 3. First-Time Setup
+### 3. Launch Services
+```bash
+docker compose up -d --build
+```
+
+The stack will start 4 Docker containers:
+* `billsmaster-frontend` (Port **3000**) — React 19 SPA served via Nginx with API proxy
+* `billsmaster-backend` (Port **3005**) — Fastify Node.js API + Playwright Chromium scraper
+* `billsmaster-postgres` (Port **5433** internal 5432) — PostgreSQL 16 database
+* `billsmaster-redis` (Port **6379**) — Redis 7 queue broker for BullMQ
+
+### 4. First-Run Setup
 1. Open [http://localhost:3000](http://localhost:3000) in your browser.
-2. The **First-Run Setup Wizard** will appear. Enter the Administrator name, email, and password.
-3. Click **Install App** in the navigation header to install BillsMaster as a desktop or mobile application.
-4. Go to **Connected Portals** -> **Connect New Portal** to add your Tauron or Demo credentials.
-5. The backend will automatically trigger background synchronization and display bills and invoices.
+2. Complete the **First-Run Setup Wizard** to register your Administrator account.
+3. Install the app on your mobile device or desktop via the **Install App** button in the top navigation bar.
+4. Navigate to **Administration -> Portale dostawców** to add your utility portal accounts.
 
 ---
 
-## Local Development (Without Docker)
+## 🏗️ Architecture
 
-### Prerequisites
-- Node.js 20+
-- PostgreSQL running locally on port 5432
-- Redis running locally on port 6379
-
-### Run Steps
-```bash
-# 1. Install all dependencies across the workspace
-npm install
-
-# 2. Build shared types
-npm run build:shared
-
-# 3. Apply database migrations
-cd apps/backend
-npx prisma db push
-npx prisma db seed
-cd ../..
-
-# 4. Start backend and frontend in development mode
-npm run dev:backend
-npm run dev:frontend
+```
+                       ┌────────────────────────────────────────┐
+                       │          React 19 PWA Client           │
+                       │   (Tailwind CSS, ZBP QR, PDF Viewer)   │
+                       └───────────────────┬────────────────────┘
+                                           │ HTTP / WS
+                                           ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                      Nginx Reverse Proxy & Static Server                      │
+└──────────────────────────────────────┬────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                           Fastify REST & WS Backend                           │
+│  ┌───────────────────────┐ ┌───────────────────────┐ ┌─────────────────────┐  │
+│  │   Auth & Accounts     │ │   AES-256-GCM Crypto  │ │  MailScript Ingest  │  │
+│  └───────────────────────┘ └───────────────────────┘ └─────────────────────┘  │
+└──────────────┬───────────────────────────┬────────────────────────────┬───────┘
+               │                           │                            │
+               ▼                           ▼                            ▼
+┌───────────────────────────┐ ┌──────────────────────────┐ ┌────────────────────┐
+│       PostgreSQL 16       │ │      Redis 7 Queue       │ │ Storage Archive    │
+│  (Prisma ORM data models) │ │    (BullMQ Job Broker)   │ │ (PDFs & Sessions)  │
+└───────────────────────────┘ └────────────┬─────────────┘ └────────────────────┘
+                                           │
+                                           ▼
+                              ┌──────────────────────────┐
+                              │  BullMQ Scraper Workers  │
+                              │   (Playwright Chromium)  │
+                              └──────────────────────────┘
 ```
 
 ---
 
-## Adding a New Provider Plugin
+## 🛠️ Monorepo Structure
 
-To add a new utility provider (e.g. Orange, PGNiG, PGE):
-1. Create a directory in `apps/backend/src/providers/<provider_id>/`.
-2. Implement the `IBillProvider` interface:
-   ```typescript
-   export interface IBillProvider {
-     readonly id: string;
-     readonly displayName: string;
-     readonly loginUrl: string;
+```
+BillsMaster/
+├── docker-compose.yml              # Multi-container orchestration
+├── redeploy.sh                     # Automated build, restart & health verification script
+├── .env.example                    # Environment variable template
+│
+├── apps/
+│   ├── backend/                    # Fastify API, Prisma ORM, Playwright Scrapers
+│   │   ├── prisma/schema.prisma    # Database schema
+│   │   ├── src/
+│   │   │   ├── controllers/        # REST route handlers
+│   │   │   ├── providers/          # Modular IBillProvider implementations
+│   │   │   ├── queue/              # BullMQ queue producers and consumers
+│   │   │   ├── security/           # AES-256-GCM encryption & bcrypt hashing
+│   │   │   └── services/           # Business logic & 12-month retention cleaner
+│   │   └── storage/                # Persistent volumes for invoices and sessions
+│   │
+│   └── frontend/                   # React 19, Vite, Tailwind CSS, Lucide icons
+│       ├── public/                 # PWA icons and provider SVGs
+│       └── src/
+│           ├── components/         # QR modal, PDF viewer, Fullscreen sync modal
+│           ├── lib/                # ZBP QR generator, API client
+│           └── pages/              # Dashboard, Bills, Portals, Groups, Users
+│
+├── docs/
+│   └── screenshots/                # Application screenshots
+└── packages/
+    └── shared-types/               # Shared TypeScript interfaces across front/back
+```
 
-     authenticate(page: Page, creds: ProviderCredentials, context: ScrapeContext): Promise<AuthResult>;
-     fetchBills(page: Page, context: ScrapeContext): Promise<ExtractedBill[]>;
-   }
-   ```
-3. Register the provider instance in `apps/backend/src/providers/registry.ts`.
-4. Seed the provider metadata in `apps/backend/src/db/seed.ts`.
+---
+
+## 🧪 Testing
+
+```bash
+# Run unit and integration tests (96+ automated tests)
+npm run test:backend
+
+# Run frontend type-checking
+npm run typecheck --workspace=frontend
+
+# Verify container deployment and health
+./redeploy.sh verify
+```
+
+---
+
+## 🔐 Security & Encryption
+
+* **Portal Credentials Encryption:** Utility portal logins and passwords stored in PostgreSQL are encrypted using **AES-256-GCM** with a unique Initialization Vector (IV) and authentication tag per record. Even with direct database read access, secrets cannot be decrypted without the host machine's `MASTER_ENCRYPTION_KEY`.
+* **Zero Telemetry / 100% Self-Hosted:** No billing information, credentials, or PDFs ever leave your private server.
+* **Network Isolation:** Database and Redis services run on internal Docker networks without exposing ports to public interfaces in production.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
