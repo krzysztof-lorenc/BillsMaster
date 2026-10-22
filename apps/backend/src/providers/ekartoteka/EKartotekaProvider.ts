@@ -98,6 +98,31 @@ export function formatMonthName(monthNumber: number): string {
   return months[monthNumber] || `Miesiąc ${monthNumber}`;
 }
 
+export function calculateEKartotekaPaymentStatus(
+  dueDate: Date,
+  amountDue: number,
+  remainingDebt: number,
+  overallBalance: number,
+  now: Date = new Date()
+): { status: 'PAID' | 'UNPAID' | 'OVERDUE'; newRemainingDebt: number } {
+  if (overallBalance >= 0 || remainingDebt < 0.01) {
+    return { status: 'PAID', newRemainingDebt: remainingDebt };
+  }
+  const status = dueDate.getTime() < now.getTime() ? 'OVERDUE' : 'UNPAID';
+  const newRemainingDebt = Math.max(0, remainingDebt - amountDue);
+  return { status, newRemainingDebt };
+}
+
+export function cleanCommunityRecipient(name?: string | null): string {
+  if (!name) return 'Wspólnota Mieszkaniowa';
+  let clean = name.trim();
+  // Strip address suffix like ", ul. ...", " ul. ...", " al. ...", " pl. ...", " os. ..."
+  clean = clean.replace(/[,;]?\s+(?:ul\.|al\.|pl\.|os\.)\s+.*$/i, '');
+  // Remove quotes
+  clean = clean.replace(/["”„«»]/g, '');
+  return clean.trim() || name.trim();
+}
+
 export interface EKartotekaAccountSummary {
   clientName?: string;
   clientId?: string;
@@ -427,6 +452,19 @@ export class EKartotekaProvider implements IBillProvider {
       // Sort descending by month to process latest months first
       const sortedRows = [...monthlyRows].sort((a, b) => b.Mc - a.Mc);
 
+      // Remaining debt for this account:
+      // In Polish housing community accounting, each account (e.g. 204 Rozrachunki z właścicielami, 211 Odsetki)
+      // maintains its own ledger balance. If the overall currentBalance >= 0, the resident owes nothing (all PAID).
+      // If currentBalance < 0, we calculate remaining debt for this account using acc.s (or fallback to currentBalance).
+      let remainingDebt = 0;
+      if (currentBalance < 0) {
+        if (typeof acc.s === 'number') {
+          remainingDebt = acc.s < 0 ? Math.abs(acc.s) : 0;
+        } else {
+          remainingDebt = Math.abs(currentBalance);
+        }
+      }
+
       for (let i = 0; i < sortedRows.length; i++) {
         const row = sortedRows[i];
         if (!row) continue;
@@ -486,27 +524,29 @@ export class EKartotekaProvider implements IBillProvider {
           }
         }
 
-        // Payment status calculation:
-        // In housing communities:
-        // If current balance >= 0, the account has no outstanding debt => PAID
-        // If row.Zaplacono >= row.DoZaplaty && row.Zaleglosc <= 0 => PAID
-        // Otherwise, if dueDate < now => OVERDUE, else => UNPAID
+        // Payment status calculation (FIFO ledger accounting):
+        // In housing communities, accounts function as a running ledger. By art. 451 k.c., payments cover the
+        // oldest debts first. Traversal is descending from the latest month backwards.
+        // If remainingDebt >= 0.01, the month is unpaid/overdue and reduces remainingDebt.
+        // Once remainingDebt is depleted (< 0.01), all older months have been covered and are marked PAID.
         const now = new Date();
         now.setHours(0, 0, 0, 0);
 
-        let paymentStatus: 'PAID' | 'UNPAID' | 'OVERDUE';
-        if (currentBalance >= 0) {
-          paymentStatus = 'PAID';
-        } else if (row.Zaplacono >= row.DoZaplaty && row.Zaleglosc <= 0) {
-          paymentStatus = 'PAID';
-        } else if (dueDate.getTime() < now.getTime()) {
-          paymentStatus = 'OVERDUE';
-        } else {
-          paymentStatus = 'UNPAID';
-        }
+        const { status, newRemainingDebt } = calculateEKartotekaPaymentStatus(
+          dueDate,
+          amountDue,
+          remainingDebt,
+          currentBalance,
+          now
+        );
+        const paymentStatus = status;
+        remainingDebt = newRemainingDebt;
+
+        // Clean community recipient name (e.g. "Wspólnota Mieszkaniowa Lipowa Dolina")
+        const recipient = cleanCommunityRecipient(communityName);
 
         // Payment title
-        const paymentTitle = `${communityName} - ${invoiceNumber}`;
+        const paymentTitle = `${recipient} - ${invoiceNumber}`;
 
         // Generate PDF statement document using pdf-lib
         let pdfBuffer: Uint8Array | undefined;
@@ -548,6 +588,7 @@ export class EKartotekaProvider implements IBillProvider {
           pdfBuffer,
           pdfFileName,
           rawMetadata: {
+            recipient,
             clientName,
             communityName,
             communityId: idADo,

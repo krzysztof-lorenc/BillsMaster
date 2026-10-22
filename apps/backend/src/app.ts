@@ -13,7 +13,9 @@ import { accountsRoutes } from './controllers/accounts.controller.js';
 import { billsRoutes } from './controllers/bills.controller.js';
 import { syncRoutes } from './controllers/sync.controller.js';
 import { mailScriptAdminRoutes, mailScriptPublicRoutes } from './controllers/mailScript.controller.js';
+import { notificationRoutes } from './controllers/notification.controller.js';
 import { SyncService } from './services/SyncService.js';
+import { prisma } from './db/prisma.js';
 import type { AuthUser } from '@bills-master/shared-types';
 
 declare module 'fastify' {
@@ -32,7 +34,7 @@ declare module '@fastify/jwt' {
 export async function buildApp(): Promise<FastifyInstance> {
   const fastify = Fastify({
     logger: false,
-    bodyLimit: 50 * 1024 * 1024, // 50MB for PDF base64 payloads
+    bodyLimit: 2 * 1024 * 1024, // 2MB default body limit across API routes
   });
 
   // Support empty or whitespace-only bodies for application/json (e.g. POST requests without payload)
@@ -54,15 +56,20 @@ export async function buildApp(): Promise<FastifyInstance> {
     origin: (origin, cb) => {
       // Allow requests with no origin (e.g. mobile apps, curl, docker-internal)
       if (!origin) return cb(null, true);
-      // Allow configured origins or localhost
+      // Allow configured origins or standard localhost development ports
+      const allowedLocalhost = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:5173',
+      ];
       if (
         config.corsOrigins.includes(origin) ||
-        origin.startsWith('http://localhost:') ||
-        origin.startsWith('http://127.0.0.1:')
+        allowedLocalhost.includes(origin)
       ) {
         return cb(null, true);
       }
-      return cb(new Error('Not allowed by CORS'), false);
+      return cb(null, false);
     },
     credentials: true,
   });
@@ -92,11 +99,26 @@ export async function buildApp(): Promise<FastifyInstance> {
       // 1. Try JWT from cookie
       if (request.cookies.token) {
         request.user = fastify.jwt.verify<AuthUser>(request.cookies.token);
-        return;
+      } else {
+        // 2. Try Authorization header
+        await request.jwtVerify();
       }
 
-      // 2. Try Authorization header
-      await request.jwtVerify();
+      if (!request.user || !request.user.id) {
+        throw new AppError('Wymagane logowanie', 401);
+      }
+
+      // 3. Verify user active state in database (protects against deactivated users using valid 7-day tokens)
+      const dbUser = await prisma.user.findUnique({
+        where: { id: request.user.id },
+        select: { isActive: true, role: true },
+      });
+
+      if (!dbUser || !dbUser.isActive) {
+        throw new AppError('Konto zostało zablokowane lub usunięte', 401);
+      }
+
+      request.user.role = dbUser.role;
     } catch {
       if (reply) {
         return reply.status(401).send({ error: 'Unauthorized', message: 'Wymagane logowanie' });
@@ -146,9 +168,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   await fastify.register(syncRoutes, { prefix: '/api' });
   await fastify.register(mailScriptAdminRoutes, { prefix: '/api/admin/mail-script' });
   await fastify.register(mailScriptPublicRoutes, { prefix: '/api/mail-script' });
+  await fastify.register(notificationRoutes, { prefix: '/api' });
+
 
   // WebSocket real-time sync streaming endpoint
-  fastify.get('/ws/sync-stream', { websocket: true }, (socket, req) => {
+  fastify.get('/ws/sync-stream', { websocket: true }, async (socket, req) => {
     try {
       // Query param token or cookie
       const query = req.query as { token?: string };
@@ -162,6 +186,17 @@ export async function buildApp(): Promise<FastifyInstance> {
       const decoded = fastify.jwt.verify<AuthUser>(token);
       if (!decoded || !decoded.id) {
         socket.close(4001, 'Unauthorized: invalid token');
+        return;
+      }
+
+      // Verify active user status in database
+      const dbUser = await prisma.user.findUnique({
+        where: { id: decoded.id },
+        select: { isActive: true },
+      });
+
+      if (!dbUser || !dbUser.isActive) {
+        socket.close(4001, 'Unauthorized: account deactivated');
         return;
       }
 

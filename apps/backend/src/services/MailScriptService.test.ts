@@ -226,4 +226,73 @@ describe('MailScriptService Unit & Integration Tests', () => {
     assert.equal(bill.dueDate?.toISOString().slice(0, 10), '2026-09-18', 'Due date must be extracted from PDF text');
     assert.equal(bill.bankAccountNumber, '96105000000000000000000001', 'IBAN must be extracted from PDF text');
   });
+
+  test('ingest should process Nota Obciążeniowa from Wspólnota Mieszkaniowa Miarki 5, creating payment title "NOTA OBCIĄŻENIOWA 7/2026/ L" and configured paymentReceiver', async () => {
+    const wmPortal = await PortalService.createPortal({
+      name: 'Wspólnota Mieszkaniowa Miarki 5',
+      providerId: 'mail-script',
+      isMailScript: true,
+      senderFilter: 'nieruchomosci\\@adres\\.pl',
+      titleFilter: '.*noty.*Miarki.*',
+      paymentReceiver: 'Wspólnota Mieszkaniowa ul. Miarki 5',
+      category: 'HOUSING',
+      syncFrequency: 1,
+      isEnabled: true,
+    });
+
+    try {
+      const config = await MailScriptService.getConfig();
+
+      // Create PDF matching real document layout
+      const doc = await PDFDocument.create();
+      const font = await doc.embedFont(StandardFonts.Helvetica);
+      const page = doc.addPage([600, 800]);
+      page.drawText('Nota obciazeniowa', { x: 50, y: 750, size: 14, font });
+      page.drawText('Miejsce wystawienia Bielsko-Biala', { x: 300, y: 750, size: 10, font });
+      page.drawText('7/2026/ l', { x: 50, y: 720, size: 12, font });
+      page.drawText('Data sprzedazy 23.09.2026', { x: 300, y: 720, size: 10, font });
+      page.drawText('Sprzedawca Wspolnota Mieszkaniowa ul. Miarki 5 NIP 5472019050', { x: 50, y: 650, size: 10, font });
+      page.drawText('Do zaplaty 60,00 zl', { x: 50, y: 500, size: 12, font });
+      page.drawText('Bank, numer konta 87 1020 1390 0000 6002 0483 3465', { x: 50, y: 450, size: 10, font });
+
+      const pdfBytes = await doc.save();
+      const pdfBase64 = Buffer.from(pdfBytes).toString('base64');
+
+      const ingestResult = await MailScriptService.ingest({
+        secretToken: config.secretToken,
+        items: [
+          {
+            portalId: wmPortal.id,
+            sender: '"Zarządzanie Nieruchomościami" <nieruchomosci@adres.pl>',
+            subject: 'noty obciążeniowe Miarki 5',
+            date: '2026-09-23T06:22:30.000Z',
+            fileName: '92026.pdf',
+            pdfBase64,
+            bodySnippet: 'Przesyłam noty obciążeniowe Miarki 5 za wrzesień',
+          },
+        ],
+      });
+
+      assert.equal(ingestResult.success, true);
+      assert.equal(ingestResult.importedCount, 1);
+
+      const bill = await prisma.bill.findFirst({
+        where: {
+          portalId: wmPortal.id,
+          invoiceNumber: '7/2026/ L',
+        },
+      });
+
+      assert.ok(bill, 'Bill with invoice number "7/2026/ L" must be created');
+      assert.equal(bill.paymentTitle, 'NOTA OBCIĄŻENIOWA 7/2026/ L', 'Payment title must be "NOTA OBCIĄŻENIOWA 7/2026/ L"');
+      assert.equal(Number(bill.amountDue), 60.00, 'Amount must be 60.00');
+      assert.equal(bill.bankAccountNumber, '87102013900000600204833465', 'Bank account must be extracted');
+
+      const meta = bill.rawMetadata as any;
+      assert.equal(meta.recipient, 'Wspólnota Mieszkaniowa ul. Miarki 5', 'Recipient should match configured portal paymentReceiver');
+      assert.equal(meta.nip, '5472019050', 'NIP should be extracted from PDF text');
+    } finally {
+      await PortalService.deletePortal(wmPortal.id).catch(() => {});
+    }
+  });
 });

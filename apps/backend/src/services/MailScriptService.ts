@@ -10,12 +10,20 @@ import { BadRequestError, UnauthorizedError } from '../core/errors.js';
 import { getTwelveMonthsAgoCutoff, cleanInvoiceNumber, cleanPaymentTitle } from '../core/utils.js';
 import { wsConnectionManager } from '../ws/connectionManager.js';
 
+function safeTokenCompare(provided?: string | null, expected?: string | null): boolean {
+  if (!provided || !expected) return false;
+  const bufA = crypto.createHash('sha256').update(provided.trim()).digest();
+  const bufB = crypto.createHash('sha256').update(expected.trim()).digest();
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
   try {
     const loadingTask = pdfjsPkg.getDocument({
       data: new Uint8Array(pdfBuffer),
       useSystemFonts: true,
       disableFontFace: true,
+      isEvalSupported: false,
     });
     const doc = await loadingTask.promise;
     let fullText = '';
@@ -170,6 +178,7 @@ export class MailScriptService {
       name: p.name,
       senderFilter: p.senderFilter || '.*',
       titleFilter: p.titleFilter || '.*',
+      paymentReceiver: p.paymentReceiver || null,
       category: (p.customCategory || p.provider?.category || 'OTHER') as any,
       lastSyncedAt: p._count.bills > 0 && p.lastSyncedAt ? p.lastSyncedAt.toISOString() : null,
     }));
@@ -388,8 +397,19 @@ function doPost(e) {
 
     if (dto.gasWebAppUrl !== undefined) {
       const gUrl = dto.gasWebAppUrl ? dto.gasWebAppUrl.trim() : null;
-      if (gUrl && !gUrl.startsWith('http://') && !gUrl.startsWith('https://')) {
-        throw new BadRequestError('Adres wdrożenia Google Apps Script musi zaczynać się od https://');
+      if (gUrl) {
+        if (!gUrl.startsWith('https://')) {
+          throw new BadRequestError('Adres wdrożenia Google Apps Script musi zaczynać się od https://');
+        }
+        try {
+          const parsed = new URL(gUrl);
+          const allowedHosts = ['script.google.com', 'script.googleusercontent.com'];
+          if (!allowedHosts.includes(parsed.hostname.toLowerCase())) {
+            throw new BadRequestError('Adres wdrożenia Google Apps Script musi należeć do domeny script.google.com');
+          }
+        } catch (err: any) {
+          throw new BadRequestError(err.message || 'Nieprawidłowy adres URL');
+        }
       }
       dataToUpdate.gasWebAppUrl = gUrl;
     }
@@ -481,7 +501,7 @@ function doPost(e) {
 
   public static async getStatus(token: string): Promise<MailScriptStatusDto> {
     const cfg = await this.getOrCreateConfig();
-    if (!token || token.trim() !== cfg.secretToken) {
+    if (!safeTokenCompare(token, cfg.secretToken)) {
       throw new UnauthorizedError('Nieprawidłowy token autoryzacyjny');
     }
 
@@ -505,7 +525,7 @@ function doPost(e) {
   ): Promise<MailScriptIngestResult> {
     const cfg = await this.getOrCreateConfig();
 
-    if (!payload.secretToken || payload.secretToken.trim() !== cfg.secretToken) {
+    if (!safeTokenCompare(payload.secretToken, cfg.secretToken)) {
       logger.warn(`[MailScriptService] Nieautoryzowana próba przesłania faktur z IP ${clientIp || 'unknown'}`);
       throw new UnauthorizedError('Nieprawidłowy lub brakujący token autoryzacyjny');
     }
@@ -626,9 +646,43 @@ function doPost(e) {
       // 3. Extract metadata from combined text (subject, snippet, PDF text, filename)
       const combinedText = `${item.subject} ${item.bodySnippet || ''} ${pdfExtractedText} ${sanitizedFileName}`;
 
+      // Check if this invoice is a "Nota obciążeniowa" (e.g. Wspólnota Mieszkaniowa, Miarki 5)
+      let isNotaObciazeniowa = false;
+      let notaNumber = '';
+
+      const notaKeywordsRegex = /(?:nota\s+obciążeniowa|nota\s+obciazeniowa|noty\s+obciążeniowe|noty\s+obciazeniowe)/i;
+      const isNotaContext =
+        notaKeywordsRegex.test(pdfExtractedText) ||
+        notaKeywordsRegex.test(item.subject) ||
+        notaKeywordsRegex.test(matchedPortal.titleFilter || '') ||
+        /Miarki\s*5/i.test(matchedPortal.name);
+
+      if (isNotaContext) {
+        const notaPatternMatch =
+          pdfExtractedText.match(/(?:nota\s+obciążeniowa|nota\s+obciazeniowa)[^0-9\n\r]{0,100}?([0-9]{1,6}\/[0-9]{4}(?:[\/\s]+[A-Za-z0-9]+)?)/i) ||
+          combinedText.match(/(?:nota\s+obciążeniowa|nota\s+obciazeniowa)[^0-9\n\r]{0,100}?([0-9]{1,6}\/[0-9]{4}(?:[\/\s]+[A-Za-z0-9]+)?)/i) ||
+          pdfExtractedText.match(/\b([0-9]{1,6}\/[0-9]{4}\s*\/\s*[A-Za-z0-9]+)\b/) ||
+          (item.subject || '').match(/\b([0-9]{1,6}\/[0-9]{4}(?:[\/\s]+[A-Za-z0-9]+)?)\b/);
+
+        if (notaPatternMatch && notaPatternMatch[1]) {
+          const rawNota = notaPatternMatch[1].trim();
+          const suffixMatch = rawNota.match(/^([0-9]{1,6}\/[0-9]{4})\s*(?:\/|\s)\s*([A-Za-z0-9]+)$/);
+          if (suffixMatch) {
+            notaNumber = `${suffixMatch[1]}/ ${suffixMatch[2].toUpperCase()}`;
+          } else {
+            notaNumber = rawNota.toUpperCase();
+          }
+          isNotaObciazeniowa = true;
+        }
+      }
+
       // Extract invoice number
       let rawInvoiceNumber = item.invoiceNumber?.trim();
       let cleanInv = rawInvoiceNumber ? cleanInvoiceNumber(rawInvoiceNumber) : '';
+
+      if (isNotaObciazeniowa && notaNumber) {
+        cleanInv = notaNumber;
+      }
 
       if (!cleanInv) {
         // Look for invoice number patterns
@@ -675,14 +729,14 @@ function doPost(e) {
         // Pattern 1: Amount immediately followed by RAZEM
         const razemMatch = combinedText.match(/\b([0-9]{1,5}(?:[,\.][0-9]{2}))\s*RAZEM\b/i);
 
-        // Pattern 2: Contextual keywords before amount (do zapłaty, kwota, rachunek, należność etc.)
-        const contextualMatch = combinedText.match(/(?:do zapłaty|kwota do zapłaty|razem do zapłaty|należność|rachunek|kwota|wartość|suma|ogółem|razem)[:\s\r\n|–-]*([0-9]{1,5}(?:[,\.][0-9]{2}))\s*(?:zł|pln)?/i);
+        // Pattern 2: Contextual keywords before amount (do zapłaty, do zaplaty, kwota, rachunek, należność etc.)
+        const contextualMatch = combinedText.match(/(?:do\s+zap[łl]aty|kwota\s+do\s+zap[łl]aty|razem\s+do\s+zap[łl]aty|nale[żz]no[sś][ćc]|rachunek|kwota|warto[sś][ćc]|suma|og[óo][łl]em|razem)[:\s\r\n|–-]*([0-9]{1,5}(?:[,\.][0-9]{2}))\s*(?:z[łl]|pln)?/i);
 
         // Pattern 3: Amount immediately followed by currency and optional payment words (e.g. "204,34 zł płatne do")
-        const currencyMatch = combinedText.match(/([0-9]{1,5}(?:[,\.][0-9]{2}))\s*(?:zł|pln)(?:\s*(?:płatne|do zapłaty|termin))?/i);
+        const currencyMatch = combinedText.match(/([0-9]{1,5}(?:[,\.][0-9]{2}))\s*(?:z[łl]|pln)(?:\s*(?:p[łl]atne|do\s+zap[łl]aty|termin))?/i);
 
         // Pattern 4: Fallback any isolated currency amount in text
-        const fallbackMatch = combinedText.match(/\b([0-9]{1,5}[,\.][0-9]{2})\s*(?:zł|pln)\b/i);
+        const fallbackMatch = combinedText.match(/\b([0-9]{1,5}[,\.][0-9]{2})\s*(?:z[łl]|pln)\b/i);
 
         const chosenAmountMatch = razemMatch || contextualMatch || currencyMatch || fallbackMatch;
         if (chosenAmountMatch && chosenAmountMatch[1]) {
@@ -772,7 +826,45 @@ function doPost(e) {
       }
 
       // Payment title
-      const paymentTitle = cleanPaymentTitle(item.paymentTitle || item.subject, cleanInv);
+      let paymentTitle: string;
+      if (isNotaObciazeniowa && notaNumber) {
+        paymentTitle = `NOTA OBCIĄŻENIOWA ${notaNumber}`;
+      } else if (item.paymentTitle && item.paymentTitle.trim()) {
+        paymentTitle = cleanPaymentTitle(item.paymentTitle, cleanInv);
+      } else {
+        paymentTitle = cleanPaymentTitle(item.subject, cleanInv);
+      }
+
+      // Extract seller/community information if available in PDF
+      let extractedSeller: string | null = null;
+      let extractedNip: string | null = null;
+
+      const sellerMatch = pdfExtractedText.match(/(?:Wspólnota\s+Mieszkaniowa[^\r\n,;]{0,50}(?:ul\.[^\r\n,;]+)?)/i);
+      if (sellerMatch) {
+        extractedSeller = sellerMatch[0].trim();
+      }
+
+      const nipMatch = pdfExtractedText.match(/NIP\s*([0-9]{10})/i);
+      if (nipMatch) {
+        extractedNip = nipMatch[1];
+      }
+
+      const resolvedRecipient =
+        matchedPortal.paymentReceiver ||
+        extractedSeller ||
+        (isNotaObciazeniowa ? 'Wspólnota Mieszkaniowa ul. Miarki 5' : null);
+
+      const rawMetadata: any = {
+        source: 'GOOGLE_APPS_SCRIPT',
+        sender: item.sender,
+        subject: item.subject,
+        receivedDate: item.date,
+        fileName: sanitizedFileName,
+        ...(resolvedRecipient ? { recipient: resolvedRecipient } : {}),
+        ...(extractedSeller ? { sellerName: extractedSeller } : {}),
+        ...(isNotaObciazeniowa ? { communityName: extractedSeller || 'Wspólnota Mieszkaniowa ul. Miarki 5' } : {}),
+        ...(extractedNip ? { nip: extractedNip } : {}),
+      };
 
       // Fallback PDF generation if no physical PDF attachment was provided
       if (!pdfBuffer || pdfBuffer.length === 0) {
@@ -788,7 +880,7 @@ function doPost(e) {
           date: issueDate.toISOString().slice(0, 10),
         });
         pdfFileSize = pdfBuffer.length;
-        sanitizedFileName = `e-rachunek_${cleanInv}.pdf`;
+        sanitizedFileName = `e-rachunek_${cleanInv.replace(/[^a-zA-Z0-9_\-\.]/g, '_')}.pdf`;
       }
 
       // Ensure invoices directory exists for this portal
@@ -815,13 +907,7 @@ function doPost(e) {
           pdfFilePath,
           pdfFileName: sanitizedFileName,
           pdfFileSize,
-          rawMetadata: {
-            source: 'GOOGLE_APPS_SCRIPT',
-            sender: item.sender,
-            subject: item.subject,
-            receivedDate: item.date,
-            fileName: sanitizedFileName,
-          },
+          rawMetadata,
         },
         create: {
           portalId: matchedPortal.id,
@@ -836,13 +922,7 @@ function doPost(e) {
           pdfFilePath,
           pdfFileName: sanitizedFileName,
           pdfFileSize,
-          rawMetadata: {
-            source: 'GOOGLE_APPS_SCRIPT',
-            sender: item.sender,
-            subject: item.subject,
-            receivedDate: item.date,
-            fileName: sanitizedFileName,
-          },
+          rawMetadata,
         },
       });
 

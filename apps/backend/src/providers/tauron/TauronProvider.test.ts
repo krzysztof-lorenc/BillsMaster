@@ -23,7 +23,14 @@ describe('TauronProvider Unit Tests - Dates & Status Extraction', () => {
   });
 
   test('should parse unpaid invoice with explicit future due date', () => {
-    const rowText = 'E/TM3/PC031995/0009/26\nFaktura\n\t16.09.2026\t-\t20.10.2026\t\n114,06 zł\nZapłać';
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 15);
+    const day = String(futureDate.getDate()).padStart(2, '0');
+    const month = String(futureDate.getMonth() + 1).padStart(2, '0');
+    const year = futureDate.getFullYear();
+    const dateStr = `${day}.${month}.${year}`;
+
+    const rowText = `E/TM3/PC031995/0009/26\nFaktura\n\t16.09.2026\t-\t${dateStr}\t\n114,06 zł\nZapłać`;
     const result = provider.extractDatesAndStatus(rowText, false, true);
 
     assert.equal(result.paymentStatus, 'UNPAID');
@@ -31,9 +38,9 @@ describe('TauronProvider Unit Tests - Dates & Status Extraction', () => {
     assert.equal(result.issueDate.getMonth(), 8); // September
     assert.equal(result.issueDate.getDate(), 16);
 
-    assert.equal(result.dueDate.getFullYear(), 2026);
-    assert.equal(result.dueDate.getMonth(), 9); // October
-    assert.equal(result.dueDate.getDate(), 20);
+    assert.equal(result.dueDate.getFullYear(), year);
+    assert.equal(result.dueDate.getMonth(), futureDate.getMonth());
+    assert.equal(result.dueDate.getDate(), futureDate.getDate());
   });
 
   test('should parse paid archived invoice', () => {
@@ -71,10 +78,10 @@ describe('TauronProvider Unit Tests - Dates & Status Extraction', () => {
     const result = provider.extractDatesAndStatus(rowText, false, true);
 
     assert.equal(result.paymentStatus, 'UNPAID');
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const diffDays = Math.round((result.dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    assert.equal(diffDays, 5, 'Due date must be 5 days in future');
+    const expected = new Date();
+    expected.setDate(expected.getDate() + 5);
+    expected.setHours(0, 0, 0, 0);
+    assert.equal(result.dueDate.getTime(), expected.getTime(), 'Due date must be 5 calendar days in future');
   });
 
   test('should fallback to issueDate + 14 days if no due date specified', () => {
@@ -85,5 +92,13 @@ describe('TauronProvider Unit Tests - Dates & Status Extraction', () => {
     assert.equal(result.issueDate.getMonth(), 0); // January
     assert.equal(result.dueDate.getDate(), 24);
     assert.equal(result.dueDate.getMonth(), 0); // January
+  });
+
+  test('should parse amounts correctly with single or double decimals and attributes', () => {
+    assert.equal(provider.parseAmount('Faktura 135.5 zł'), 135.5);
+    assert.equal(provider.parseAmount('Faktura 107,25 zł'), 107.25);
+    assert.equal(provider.parseAmount('E/TM3 21.08.2026 Opłacona', null, '135.5'), 135.5);
+    assert.equal(provider.parseAmount('E/TM3 21.08.2026 Opłacona', '114.06', null), 114.06);
+    assert.equal(provider.parseAmount('Korekta -85.09 zł Rozliczono'), -85.09);
   });
 });

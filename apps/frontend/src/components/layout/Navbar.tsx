@@ -12,11 +12,15 @@ import {
   FileText,
   Sun,
   Moon,
-  Mail
+  Mail,
+  Bell,
+  BellRing
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useTheme } from '../../context/ThemeContext.js';
 import { InstallPwaButton } from '../pwa/InstallPwaButton.js';
+import { NotificationSettingsModal } from '../notifications/NotificationSettingsModal.js';
+import { usePushNotifications } from '../../hooks/usePushNotifications.js';
 import type { ActiveSyncState } from '../../hooks/useSyncStream.js';
 
 interface NavbarProps {
@@ -40,7 +44,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   // 3-dots dropdown menu state
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const { isSubscribed } = usePushNotifications();
 
   // Senior accessibility: large font toggle with persistent local storage
   const [isLargeText, setIsLargeText] = useState<boolean>(() => {
@@ -167,9 +174,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             </nav>
           )}
 
-          {/* Right Actions: PWA Install + 3-dots Dropdown Menu */}
+          {/* Right Actions: PWA Install + Push Notifications + 3-dots Dropdown Menu */}
           <div className="flex items-center gap-2 sm:gap-3">
             <InstallPwaButton />
+
+            {/* Phone Push Notifications Bell Button */}
+            <button
+              onClick={() => setIsNotificationModalOpen(true)}
+              className={`p-3 rounded-2xl border transition-all flex items-center justify-center relative ${
+                isSubscribed
+                  ? 'bg-indigo-600/20 text-indigo-400 border-indigo-500/40 hover:bg-indigo-600/30 shadow-md shadow-indigo-600/10'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 hover:border-slate-600'
+              }`}
+              title={isSubscribed ? 'Powiadomienia na telefon aktywne' : 'Skonfiguruj powiadomienia na telefon'}
+              aria-label="Powiadomienia na telefon"
+            >
+              {isSubscribed ? <BellRing className="w-6 h-6" /> : <Bell className="w-6 h-6" />}
+              {isSubscribed && (
+                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-slate-900" />
+              )}
+            </button>
 
             {/* 3-dots Menu Container */}
             <div className="relative" ref={menuRef}>
@@ -280,6 +304,25 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <span>{isLargeText ? 'Zmniejsz tekst (standardowy)' : 'Powiększ tekst (duży)'}</span>
                     </button>
 
+                    {/* Phone Push Notifications Modal Trigger */}
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setIsNotificationModalOpen(true);
+                      }}
+                      className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-base font-bold text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left"
+                    >
+                      <Bell className="w-5 h-5 shrink-0 text-indigo-400" />
+                      <div className="flex-1 flex items-center justify-between">
+                        <span>Powiadomienia na telefon</span>
+                        {isSubscribed && (
+                          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            Włączone
+                          </span>
+                        )}
+                      </div>
+                    </button>
+
                     {/* Log off button */}
                     <div className="pt-1.5 border-t border-slate-800/80">
                       <button
@@ -330,6 +373,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         )}
       </div>
+
+      <NotificationSettingsModal
+        isOpen={isNotificationModalOpen}
+        onClose={() => setIsNotificationModalOpen(false)}
+      />
     </header>
   );
 };

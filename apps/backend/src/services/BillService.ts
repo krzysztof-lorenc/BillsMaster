@@ -9,7 +9,7 @@ export class BillService {
   /**
    * Helper to retrieve all portal IDs accessible to a user via their assigned groups (optionally filtered by groupId).
    */
-  private static async getAccessiblePortalIds(userId: string, groupId?: string): Promise<string[]> {
+  public static async getAccessiblePortalIds(userId: string, groupId?: string): Promise<string[]> {
     const userGroupsWhere: { userId: string; groupId?: string } = { userId };
     if (groupId) {
       userGroupsWhere.groupId = groupId;
@@ -308,6 +308,7 @@ export class BillService {
             providerName: b.portal.provider.name,
             category: b.portal.customCategory || b.portal.provider.category,
             isMailScript: Boolean(b.portal.isMailScript || b.portal.providerId === 'mail-script'),
+            paymentReceiver: b.portal.paymentReceiver || null,
           }
         : undefined,
     };

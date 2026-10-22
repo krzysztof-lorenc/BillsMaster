@@ -5,6 +5,7 @@ export interface MailScriptPortalRule {
   name: string;
   senderFilter: string;
   titleFilter: string;
+  paymentReceiver?: string | null;
   category?: ProviderCategory;
   lastSyncedAt?: string | null;
 }

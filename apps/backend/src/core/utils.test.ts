@@ -44,13 +44,26 @@ describe('Invoice Number and Title Utils', () => {
     assert.equal(cleanInvoiceNumber(''), '');
   });
 
-  test('should clean payment titles to invoice number', () => {
+  test('should clean nota obciążeniowa invoice numbers with series letter', () => {
+    assert.equal(cleanInvoiceNumber('7/2026/ l'), '7/2026/ L');
+    assert.equal(cleanInvoiceNumber('7/2026/ L'), '7/2026/ L');
+    assert.equal(cleanInvoiceNumber('7/2026/l'), '7/2026/ L');
+    assert.equal(cleanInvoiceNumber('Nota obciążeniowa 7/2026/ l'), '7/2026/ L');
+    assert.equal(cleanInvoiceNumber('NOTA OBCIĄŻENIOWA 7/2026/ L'), '7/2026/ L');
+  });
+
+  test('should clean payment titles to invoice number and preserve NOTA OBCIĄŻENIOWA', () => {
     const dirtyTitle = `Tauron Faktura E/TM3/PC100452/0002/26/3
       Faktura
       
         Przepraszamy, w tej chwili nie możemy pobrać dokumentu. Spróbuj ponownie później.`;
     assert.equal(cleanPaymentTitle(dirtyTitle), 'E/TM3/PC100452/0002/26/3');
     assert.equal(cleanPaymentTitle(null, 'E/TM3/PC100452/0002/26/3\nFaktura'), 'E/TM3/PC100452/0002/26/3');
+    assert.equal(cleanPaymentTitle('NOTA OBCIĄŻENIOWA 7/2026/ L'), 'NOTA OBCIĄŻENIOWA 7/2026/ L');
+    assert.equal(cleanPaymentTitle('Nota obciążeniowa 7/2026/ l'), 'NOTA OBCIĄŻENIOWA 7/2026/ L');
+    assert.equal(cleanPaymentTitle(null, 'NOTA OBCIĄŻENIOWA 7/2026/ L'), 'NOTA OBCIĄŻENIOWA 7/2026/ L');
+    assert.equal(cleanPaymentTitle(null, '7/2026/ L'), '7/2026/ L');
+    assert.equal(cleanPaymentTitle('Wspólnota Mieszkaniowa - 7/2026/ L'), 'Wspólnota Mieszkaniowa - 7/2026/ L');
   });
 
   test('should correctly identify dates older or newer than 12 months', () => {

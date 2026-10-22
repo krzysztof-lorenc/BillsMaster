@@ -24,6 +24,7 @@ export interface BillDto {
     providerName: string;
     category: string;
     isMailScript?: boolean;
+    paymentReceiver?: string | null;
   };
 }
 

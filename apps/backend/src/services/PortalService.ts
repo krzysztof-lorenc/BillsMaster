@@ -13,6 +13,29 @@ import type {
 } from '@bills-master/shared-types';
 
 export class PortalService {
+  private static validateRegexFilter(filter: string | null | undefined, fieldLabel: string): string | null {
+    if (!filter || !filter.trim()) return null;
+    const trimmed = filter.trim();
+    if (trimmed.length > 256) {
+      throw new BadRequestError(`Filtr ${fieldLabel} nie może przekraczać 256 znaków`);
+    }
+    try {
+      new RegExp(trimmed);
+    } catch (err: any) {
+      throw new BadRequestError(`Nieprawidłowe wyrażenie regularne dla filtra ${fieldLabel}: ${err.message}`);
+    }
+    return trimmed;
+  }
+
+  private static validatePaymentReceiver(receiver: string | null | undefined): string | null {
+    if (!receiver || !receiver.trim()) return null;
+    const trimmed = receiver.trim();
+    if (trimmed.length > 120) {
+      throw new BadRequestError('Nazwa odbiorcy płatności nie może przekraczać 120 znaków');
+    }
+    return trimmed;
+  }
+
   public static mapPortalToDto(p: any): PortalDto {
     const isMail = Boolean(p.isMailScript || p.providerId === 'mail-script');
     const category = (p.customCategory || p.provider?.category || 'OTHER') as any;
@@ -37,6 +60,10 @@ export class PortalService {
       isMailScript: isMail,
       senderFilter: p.senderFilter || null,
       titleFilter: p.titleFilter || null,
+      paymentReceiver: p.paymentReceiver || null,
+      notifyNewBill: p.notifyNewBill ?? true,
+      notifyDueSoon: p.notifyDueSoon ?? true,
+      notifyOverdue: p.notifyOverdue ?? true,
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
     };
@@ -123,21 +150,9 @@ export class PortalService {
       encryptedPass = CryptoService.encrypt(password);
     }
 
-    if (data.senderFilter) {
-      try {
-        new RegExp(data.senderFilter);
-      } catch (err: any) {
-        throw new BadRequestError(`Nieprawidłowe wyrażenie regularne dla filtra nadawcy: ${err.message}`);
-      }
-    }
-
-    if (data.titleFilter) {
-      try {
-        new RegExp(data.titleFilter);
-      } catch (err: any) {
-        throw new BadRequestError(`Nieprawidłowe wyrażenie regularne dla filtra tematu: ${err.message}`);
-      }
-    }
+    const senderFilter = this.validateRegexFilter(data.senderFilter, 'nadawcy');
+    const titleFilter = this.validateRegexFilter(data.titleFilter, 'tematu');
+    const paymentReceiver = this.validatePaymentReceiver(data.paymentReceiver);
 
     const groupIds = Array.isArray(data.groupIds) ? Array.from(new Set(data.groupIds)) : [];
     const syncFrequency = [1, 2, 3, 4].includes(Number(data.syncFrequency)) ? Number(data.syncFrequency) : 1;
@@ -150,8 +165,12 @@ export class PortalService {
         encryptedPass,
         isEnabled: data.isEnabled ?? true,
         isMailScript,
-        senderFilter: data.senderFilter ? data.senderFilter.trim() : null,
-        titleFilter: data.titleFilter ? data.titleFilter.trim() : null,
+        senderFilter,
+        titleFilter,
+        paymentReceiver,
+        notifyNewBill: data.notifyNewBill ?? true,
+        notifyDueSoon: data.notifyDueSoon ?? true,
+        notifyOverdue: data.notifyOverdue ?? true,
         customCategory: data.category || null,
         agreementFilter: data.agreementFilter ? data.agreementFilter.trim() : null,
         syncFrequency,
@@ -251,33 +270,31 @@ export class PortalService {
     }
 
     if (data.senderFilter !== undefined) {
-      if (data.senderFilter && data.senderFilter.trim()) {
-        try {
-          new RegExp(data.senderFilter.trim());
-        } catch (err: any) {
-          throw new BadRequestError(`Nieprawidłowe wyrażenie regularne dla filtra nadawcy: ${err.message}`);
-        }
-        updateData.senderFilter = data.senderFilter.trim();
-      } else {
-        updateData.senderFilter = null;
-      }
+      updateData.senderFilter = this.validateRegexFilter(data.senderFilter, 'nadawcy');
     }
 
     if (data.titleFilter !== undefined) {
-      if (data.titleFilter && data.titleFilter.trim()) {
-        try {
-          new RegExp(data.titleFilter.trim());
-        } catch (err: any) {
-          throw new BadRequestError(`Nieprawidłowe wyrażenie regularne dla filtra tematu: ${err.message}`);
-        }
-        updateData.titleFilter = data.titleFilter.trim();
-      } else {
-        updateData.titleFilter = null;
-      }
+      updateData.titleFilter = this.validateRegexFilter(data.titleFilter, 'tematu');
+    }
+
+    if (data.paymentReceiver !== undefined) {
+      updateData.paymentReceiver = this.validatePaymentReceiver(data.paymentReceiver);
     }
 
     if (data.category !== undefined) {
       updateData.customCategory = data.category || null;
+    }
+
+    if (data.notifyNewBill !== undefined) {
+      updateData.notifyNewBill = data.notifyNewBill;
+    }
+
+    if (data.notifyDueSoon !== undefined) {
+      updateData.notifyDueSoon = data.notifyDueSoon;
+    }
+
+    if (data.notifyOverdue !== undefined) {
+      updateData.notifyOverdue = data.notifyOverdue;
     }
 
     await prisma.$transaction(async (tx) => {
@@ -492,6 +509,16 @@ export class PortalService {
       // Keep existing encrypted pass if decrypt fails
     }
 
+    const senderFilter = data?.senderFilter !== undefined
+      ? this.validateRegexFilter(data.senderFilter, 'nadawcy')
+      : existing.senderFilter;
+    const titleFilter = data?.titleFilter !== undefined
+      ? this.validateRegexFilter(data.titleFilter, 'tematu')
+      : existing.titleFilter;
+    const paymentReceiver = data?.paymentReceiver !== undefined
+      ? this.validatePaymentReceiver(data.paymentReceiver)
+      : existing.paymentReceiver;
+
     const portal = await prisma.portal.create({
       data: {
         name,
@@ -500,8 +527,12 @@ export class PortalService {
         encryptedPass,
         isEnabled,
         isMailScript: existing.isMailScript,
-        senderFilter: data?.senderFilter !== undefined ? data.senderFilter : existing.senderFilter,
-        titleFilter: data?.titleFilter !== undefined ? data.titleFilter : existing.titleFilter,
+        senderFilter,
+        titleFilter,
+        paymentReceiver,
+        notifyNewBill: data?.notifyNewBill !== undefined ? data.notifyNewBill : existing.notifyNewBill,
+        notifyDueSoon: data?.notifyDueSoon !== undefined ? data.notifyDueSoon : existing.notifyDueSoon,
+        notifyOverdue: data?.notifyOverdue !== undefined ? data.notifyOverdue : existing.notifyOverdue,
         customCategory: (data as any)?.category !== undefined ? (data as any).category : existing.customCategory,
         agreementFilter,
         syncFrequency,

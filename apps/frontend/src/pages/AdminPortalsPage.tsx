@@ -15,7 +15,9 @@ import {
   AlertCircle,
   Copy,
   Clock,
-  Mail
+  Mail,
+  Bell,
+  BellOff
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import type { 
@@ -79,6 +81,10 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
   const [duplicateSyncFrequency, setDuplicateSyncFrequency] = useState<number>(1);
   const [duplicateGroupIds, setDuplicateGroupIds] = useState<string[]>([]);
   const [duplicateIsEnabled, setDuplicateIsEnabled] = useState(true);
+  const [duplicatePaymentReceiver, setDuplicatePaymentReceiver] = useState('');
+  const [duplicateNotifyNewBill, setDuplicateNotifyNewBill] = useState(true);
+  const [duplicateNotifyDueSoon, setDuplicateNotifyDueSoon] = useState(true);
+  const [duplicateNotifyOverdue, setDuplicateNotifyOverdue] = useState(true);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const [duplicateSubmitting, setDuplicateSubmitting] = useState(false);
 
@@ -98,11 +104,15 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [senderFilter, setSenderFilter] = useState('');
   const [titleFilter, setTitleFilter] = useState('');
+  const [paymentReceiver, setPaymentReceiver] = useState('');
   const [category, setCategory] = useState<ProviderCategory>('OTHER');
   const [agreementFilter, setAgreementFilter] = useState('');
   const [syncFrequency, setSyncFrequency] = useState<number>(1);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [isEnabled, setIsEnabled] = useState(true);
+  const [notifyNewBill, setNotifyNewBill] = useState(true);
+  const [notifyDueSoon, setNotifyDueSoon] = useState(true);
+  const [notifyOverdue, setNotifyOverdue] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
 
@@ -143,6 +153,9 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
       setCategory(tmpl.category);
       setSenderFilter(tmpl.senderFilter);
       setTitleFilter(tmpl.titleFilter);
+      if (tmpl.paymentReceiver) {
+        setPaymentReceiver(tmpl.paymentReceiver);
+      }
     }
   };
 
@@ -157,11 +170,15 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
     setPassword('');
     setSenderFilter('');
     setTitleFilter('');
+    setPaymentReceiver('');
     setCategory('OTHER');
     setAgreementFilter('');
     setSyncFrequency(1);
     setSelectedGroupIds([]);
     setIsEnabled(true);
+    setNotifyNewBill(true);
+    setNotifyDueSoon(true);
+    setNotifyOverdue(true);
     setFormError(null);
     setIsModalOpen(true);
   };
@@ -176,11 +193,15 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
     setPassword(''); // leave blank to keep existing
     setSenderFilter(portal.senderFilter || '');
     setTitleFilter(portal.titleFilter || '');
+    setPaymentReceiver(portal.paymentReceiver || '');
     setCategory((portal.category || portal.providerCategory || 'OTHER') as any);
     setAgreementFilter(portal.agreementFilter || '');
     setSyncFrequency(portal.syncFrequency || 1);
     setSelectedGroupIds(portal.groupIds || []);
     setIsEnabled(portal.isEnabled);
+    setNotifyNewBill(portal.notifyNewBill ?? true);
+    setNotifyDueSoon(portal.notifyDueSoon ?? true);
+    setNotifyOverdue(portal.notifyOverdue ?? true);
     if (isMail) {
       const match = MAIL_SCRIPT_TEMPLATES.find(
         (t) => t.senderFilter === portal.senderFilter && t.titleFilter === portal.titleFilter
@@ -239,6 +260,10 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
     setDuplicateSyncFrequency(portal.syncFrequency || 1);
     setDuplicateGroupIds(portal.groupIds || []);
     setDuplicateIsEnabled(portal.isEnabled);
+    setDuplicatePaymentReceiver(portal.paymentReceiver || '');
+    setDuplicateNotifyNewBill(portal.notifyNewBill ?? true);
+    setDuplicateNotifyDueSoon(portal.notifyDueSoon ?? true);
+    setDuplicateNotifyOverdue(portal.notifyOverdue ?? true);
     setDuplicateError(null);
     setIsDuplicateModalOpen(true);
   };
@@ -262,6 +287,10 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
         syncFrequency: duplicateSyncFrequency,
         groupIds: duplicateGroupIds,
         isEnabled: duplicateIsEnabled,
+        paymentReceiver: duplicatePaymentReceiver.trim() ? duplicatePaymentReceiver.trim() : null,
+        notifyNewBill: duplicateNotifyNewBill,
+        notifyDueSoon: duplicateNotifyDueSoon,
+        notifyOverdue: duplicateNotifyOverdue,
       };
 
       await api.post(`/api/admin/portals/${duplicatingPortal.id}/duplicate`, payload);
@@ -332,7 +361,11 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
           isMailScript,
           senderFilter: isMailScript ? (senderFilter.trim() || '.*') : null,
           titleFilter: isMailScript ? (titleFilter.trim() || '.*') : null,
+          paymentReceiver: paymentReceiver.trim() ? paymentReceiver.trim() : null,
           category: isMailScript ? category : undefined,
+          notifyNewBill,
+          notifyDueSoon,
+          notifyOverdue,
         };
         if (!isMailScript) {
           if (login && login !== editingPortal.loginMasked) {
@@ -361,7 +394,11 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
           isMailScript,
           senderFilter: isMailScript ? (senderFilter.trim() || '.*') : null,
           titleFilter: isMailScript ? (titleFilter.trim() || '.*') : null,
+          paymentReceiver: paymentReceiver.trim() ? paymentReceiver.trim() : null,
           category: isMailScript ? category : undefined,
+          notifyNewBill,
+          notifyDueSoon,
+          notifyOverdue,
         };
         await api.post<{ portal: PortalDto }>('/api/admin/portals', payload);
       }
@@ -499,6 +536,7 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
                   <th className="px-5 py-3.5">Przypisane grupy</th>
                   <th className="px-5 py-3.5">Częstotliwość</th>
                   <th className="px-5 py-3.5">Status synchronizacji</th>
+                  <th className="px-5 py-3.5">Powiadomienia</th>
                   <th className="px-5 py-3.5">Stan</th>
                   <th className="px-5 py-3.5 text-right">Akcje</th>
                 </tr>
@@ -548,9 +586,21 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
                         <div className="space-y-0.5 font-mono">
                           <div>Nadawca: <strong className="text-indigo-300">{portal.senderFilter || '.*'}</strong></div>
                           <div>Temat: <strong className="text-indigo-300">{portal.titleFilter || '.*'}</strong></div>
+                          {portal.paymentReceiver && (
+                            <div className="text-amber-300 font-sans mt-0.5">
+                              Odbiorca: <strong>{portal.paymentReceiver}</strong>
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <span className="font-mono sm:text-sm">{portal.loginMasked}</span>
+                        <div>
+                          <span className="font-mono sm:text-sm">{portal.loginMasked}</span>
+                          {portal.paymentReceiver && (
+                            <div className="text-amber-300 font-sans text-xs mt-0.5">
+                              Odbiorca: <strong>{portal.paymentReceiver}</strong>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="px-5 py-4">
@@ -602,6 +652,35 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
                           </div>
                         )}
                       </div>
+                    </td>
+                    <td className="px-5 py-4">
+                      {portal.notifyNewBill || portal.notifyDueSoon || portal.notifyOverdue ? (
+                        <div className="flex items-center gap-1.5" title={`Powiadomienia: ${[portal.notifyNewBill && 'Nowy rachunek', portal.notifyDueSoon && 'Do 3 dni', portal.notifyOverdue && 'Po terminie'].filter(Boolean).join(', ')}`}>
+                          <Bell className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                          <div className="flex flex-wrap gap-1">
+                            {portal.notifyNewBill && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                Nowy
+                              </span>
+                            )}
+                            {portal.notifyDueSoon && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                3 dni
+                              </span>
+                            )}
+                            {portal.notifyOverdue && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                Termin
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-slate-500 text-xs italic">
+                          <BellOff className="w-3.5 h-3.5" />
+                          <span>Wyłączone</span>
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-4">
                       <span
@@ -898,6 +977,23 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
                       Wyrażenie regularne filtrujące temat wiadomości e-mail (np. <code className="text-amber-300">.*faktura.*|.*rachunek.*</code>).
                     </p>
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                      <span>Odbiorca płatności (nazwa do przelewu)</span>
+                      <span className="text-xs font-normal text-amber-400">Opcjonalnie</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={paymentReceiver}
+                      onChange={(e) => setPaymentReceiver(e.target.value)}
+                      placeholder="np. Wspólnota Mieszkaniowa ul. Miarki 5"
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
+                    />
+                    <p className="text-xs text-slate-400 mt-1.5">
+                      Domyślna nazwa odbiorcy widoczna przy generowaniu kodów QR przelewu i kopiowaniu danych do płatności.
+                    </p>
+                  </div>
                 </>
               ) : (
                 <>
@@ -1012,6 +1108,48 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
                 </label>
               </div>
 
+              {/* Web Push Notification Triggers Section */}
+              <div className="pt-3 border-t border-slate-800 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-indigo-400" />
+                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                    Powiadomienia na telefon (Android / PWA)
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Wybierz, które alerty mają być wysyłane dla tego portalu (zbiorczy poranny raport o 08:30):
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-slate-700 cursor-pointer text-xs font-medium text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={notifyNewBill}
+                      onChange={(e) => setNotifyNewBill(e.target.checked)}
+                      className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span>Nowy rachunek</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-slate-700 cursor-pointer text-xs font-medium text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={notifyDueSoon}
+                      onChange={(e) => setNotifyDueSoon(e.target.checked)}
+                      className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span>Termin do 3 dni</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-slate-700 cursor-pointer text-xs font-medium text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={notifyOverdue}
+                      onChange={(e) => setNotifyOverdue(e.target.checked)}
+                      className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span>Po terminie</span>
+                  </label>
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={formSubmitting}
@@ -1097,6 +1235,20 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
               </div>
 
               <div>
+                <label className="block text-sm font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                  <span>Odbiorca płatności (nazwa do przelewu)</span>
+                  <span className="text-xs font-normal text-slate-400">Opcjonalnie</span>
+                </label>
+                <input
+                  type="text"
+                  value={duplicatePaymentReceiver}
+                  onChange={(e) => setDuplicatePaymentReceiver(e.target.value)}
+                  placeholder="np. Wspólnota Mieszkaniowa ul. Miarki 5"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
+                />
+              </div>
+
+              <div>
                 <label className="block text-sm font-bold text-slate-200 mb-1.5 flex items-center gap-2">
                   <Clock className="w-4 h-4 text-indigo-400" />
                   <span>Częstotliwość automatycznego odświeżania na dobę</span>
@@ -1150,6 +1302,45 @@ export const AdminPortalsPage: React.FC<AdminPortalsPageProps> = ({ onOpenMailSc
                 <label htmlFor="duplicateIsEnabled" className="text-sm font-semibold text-slate-200 cursor-pointer">
                   Portal jest włączony (aktywne pobieranie faktur)
                 </label>
+              </div>
+
+              {/* Duplicate Web Push Notification Triggers */}
+              <div className="pt-3 border-t border-slate-800 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-indigo-400" />
+                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                    Powiadomienia na telefon
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-slate-700 cursor-pointer text-xs font-medium text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={duplicateNotifyNewBill}
+                      onChange={(e) => setDuplicateNotifyNewBill(e.target.checked)}
+                      className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span>Nowy rachunek</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-slate-700 cursor-pointer text-xs font-medium text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={duplicateNotifyDueSoon}
+                      onChange={(e) => setDuplicateNotifyDueSoon(e.target.checked)}
+                      className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span>Termin do 3 dni</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-slate-700 cursor-pointer text-xs font-medium text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={duplicateNotifyOverdue}
+                      onChange={(e) => setDuplicateNotifyOverdue(e.target.checked)}
+                      className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span>Po terminie</span>
+                  </label>
+                </div>
               </div>
 
               <div className="flex items-center gap-3 pt-2">

@@ -6,6 +6,8 @@ import {
   parseEKartotekaDate,
   parseEKartotekaAmount,
   formatMonthName,
+  calculateEKartotekaPaymentStatus,
+  cleanCommunityRecipient,
 } from './EKartotekaProvider.js';
 
 describe('EKartotekaProvider Unit Tests', () => {
@@ -125,5 +127,91 @@ describe('EKartotekaProvider Unit Tests', () => {
     assert.ok(pdfBuf && pdfBuf.length > 500, 'PDF buffer should be generated and non-empty');
     const header = Buffer.from(pdfBuf.slice(0, 5)).toString('utf-8');
     assert.equal(header, '%PDF-', 'Buffer should start with valid %PDF- header');
+  });
+
+  test('calculateEKartotekaPaymentStatus marks all bills PAID when overall balance >= 0', () => {
+    const fixedNow = new Date('2026-10-07T12:00:00Z');
+    const pastDueDate = new Date('2026-08-10T12:00:00Z');
+    const futureDueDate = new Date('2026-10-10T12:00:00Z');
+
+    const resPast = calculateEKartotekaPaymentStatus(pastDueDate, 250, 0, 50.0, fixedNow);
+    assert.equal(resPast.status, 'PAID');
+    assert.equal(resPast.newRemainingDebt, 0);
+
+    const resFuture = calculateEKartotekaPaymentStatus(futureDueDate, 250, 0, 0.0, fixedNow);
+    assert.equal(resFuture.status, 'PAID');
+    assert.equal(resFuture.newRemainingDebt, 0);
+  });
+
+  test('calculateEKartotekaPaymentStatus handles FIFO allocation across monthly assessments correctly', () => {
+    const fixedNow = new Date('2026-10-07T12:00:00Z');
+
+    // Simulate real community account 204:
+    // Total debt: 1458.81 PLN (charges May-Oct minus May payment)
+    // Months descending: 10 (Oct), 09 (Sep), 08 (Aug), 07 (Jul), 06 (Jun), 05 (May), 04 (Apr), 03 (Mar), 02 (Feb), 01 (Jan), 00 (BO)
+    const monthlyItems = [
+      { month: 10, amount: 247.19, due: new Date('2026-10-10T12:00:00Z') }, // future due date
+      { month: 9, amount: 247.19, due: new Date('2026-09-10T12:00:00Z') },  // past due date
+      { month: 8, amount: 247.19, due: new Date('2026-08-10T12:00:00Z') },
+      { month: 7, amount: 247.19, due: new Date('2026-07-10T12:00:00Z') },
+      { month: 6, amount: 247.19, due: new Date('2026-06-10T12:00:00Z') },
+      { month: 5, amount: 247.19, due: new Date('2026-05-10T12:00:00Z') },
+      { month: 4, amount: 247.19, due: new Date('2026-04-10T12:00:00Z') },
+      { month: 3, amount: 234.31, due: new Date('2026-03-10T12:00:00Z') },
+      { month: 2, amount: 234.31, due: new Date('2026-02-10T12:00:00Z') },
+      { month: 1, amount: 234.31, due: new Date('2026-01-10T12:00:00Z') },
+      { month: 0, amount: 507.67, due: new Date('2026-01-10T12:00:00Z') },
+    ];
+
+    let remainingDebt = 1458.81;
+    const overallBalance = -1483.14;
+    const results: Record<number, 'PAID' | 'UNPAID' | 'OVERDUE'> = {};
+
+    for (const item of monthlyItems) {
+      const { status, newRemainingDebt } = calculateEKartotekaPaymentStatus(
+        item.due,
+        item.amount,
+        remainingDebt,
+        overallBalance,
+        fixedNow
+      );
+      results[item.month] = status;
+      remainingDebt = newRemainingDebt;
+    }
+
+    // October: future dueDate -> UNPAID
+    assert.equal(results[10], 'UNPAID');
+    // September through May: past dueDate with debt -> OVERDUE
+    assert.equal(results[9], 'OVERDUE');
+    assert.equal(results[8], 'OVERDUE');
+    assert.equal(results[7], 'OVERDUE');
+    assert.equal(results[6], 'OVERDUE');
+    assert.equal(results[5], 'OVERDUE');
+    // April down to BO: covered by historical payments -> PAID
+    assert.equal(results[4], 'PAID');
+    assert.equal(results[3], 'PAID');
+    assert.equal(results[2], 'PAID');
+    assert.equal(results[1], 'PAID');
+    assert.equal(results[0], 'PAID');
+    assert.equal(remainingDebt, 0);
+  });
+
+  test('cleanCommunityRecipient extracts clean recipient name without street addresses or quotes', () => {
+    assert.equal(
+      cleanCommunityRecipient('Wspólnota Mieszkaniowa "Lipowa Dolina" ul. Bystrzańska 15 b, 15 c'),
+      'Wspólnota Mieszkaniowa Lipowa Dolina'
+    );
+    assert.equal(
+      cleanCommunityRecipient('Wspólnota Mieszkaniowa „Lipowa Dolina”'),
+      'Wspólnota Mieszkaniowa Lipowa Dolina'
+    );
+    assert.equal(
+      cleanCommunityRecipient('Spółdzielnia Mieszkaniowa "Złote Łany", ul. Jutrzenki 22'),
+      'Spółdzielnia Mieszkaniowa Złote Łany'
+    );
+    assert.equal(
+      cleanCommunityRecipient(''),
+      'Wspólnota Mieszkaniowa'
+    );
   });
 });

@@ -40,6 +40,7 @@ model User {
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
   groups       UserGroup[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -98,7 +99,11 @@ model Portal {
   isMailScript     Boolean      @default(false) @map("is_mail_script")
   senderFilter     String?      @map("sender_filter")
   titleFilter      String?      @map("title_filter")
+  paymentReceiver  String?      @map("payment_receiver")
   customCategory   String?      @map("custom_category")
+  notifyNewBill    Boolean      @default(true) @map("notify_new_bill")
+  notifyDueSoon    Boolean      @default(true) @map("notify_due_soon")
+  notifyOverdue    Boolean      @default(true) @map("notify_overdue")
   lastSyncStatus   SyncStatus   @default(IDLE) @map("last_sync_status")
   lastSyncMessage  String?      @map("last_sync_message")
   lastSyncedAt     DateTime?    @map("last_synced_at")
@@ -187,3 +192,20 @@ model MailScriptConfig {
 
   @@map("mail_script_configs")
 }
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+

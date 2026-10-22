@@ -262,7 +262,21 @@ export class TauronProvider implements IBillProvider {
     try {
       await context.reportProgress(88, 'Wczytywanie faktur archiwalnych...');
       await page.goto(TAURON_CONFIG.archiveInvoicesUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForTimeout(2000);
+      await page.waitForSelector(TAURON_CONFIG.selectors.invoiceRow, { timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+
+      // Expand all archive agreement blocks if collapsed
+      const archiveToggles = await page.$$('#ebokItems a.toggle-button, .toggle-button');
+      for (const t of archiveToggles) {
+        try {
+          await t.click();
+          await page.waitForTimeout(500);
+        } catch {
+          // Ignore
+        }
+      }
+      await page.waitForSelector(TAURON_CONFIG.selectors.invoiceRow, { timeout: 5000 }).catch(() => {});
+
       await this.parseInvoicesFromPage(
         page,
         context,
@@ -276,6 +290,42 @@ export class TauronProvider implements IBillProvider {
         clientToIban,
         nameToIban
       );
+
+      // Check for additional pages in archive (page 2, 3...)
+      let currentPage = 1;
+      const maxPages = 5;
+      while (currentPage < maxPages) {
+        const nextPageNum = currentPage + 1;
+        const hasNextPage = await page.evaluate((nextPage) => {
+          const pageLink = document.querySelector(`.pagination a[data-page="${nextPage}"], .pagination a:not(.active)`) as HTMLElement | null;
+          if (pageLink && pageLink.getAttribute('data-page') === String(nextPage)) {
+            pageLink.click();
+            return true;
+          }
+          return false;
+        }, nextPageNum);
+
+        if (!hasNextPage) break;
+
+        context.log.info(`[TauronProvider] Navigating to archive page ${nextPageNum}...`);
+        await page.waitForTimeout(1500);
+        await page.waitForSelector(TAURON_CONFIG.selectors.invoiceRow, { timeout: 10000 }).catch(() => {});
+        currentPage++;
+
+        await this.parseInvoicesFromPage(
+          page,
+          context,
+          extractedBills,
+          seenInvoiceNumbers,
+          defaultIban,
+          true,
+          filterRegex,
+          matchedClientNumbers,
+          clientToAgreementMap,
+          clientToIban,
+          nameToIban
+        );
+      }
     } catch (e) {
       context.log.warn(`[TauronProvider] Could not load archived invoices: ${e}`);
     }
@@ -320,21 +370,11 @@ export class TauronProvider implements IBillProvider {
         seenInvoiceNumbers.add(invoiceNumber);
 
         // Extract amount
-        let amountDue = 0.0;
         const amountEl = await row.$('.amount, input[data-charge-value]');
-        if (amountEl) {
-          const attrVal = await amountEl.getAttribute('data-charge-value');
-          const txtVal = (await amountEl.innerText().catch(() => '')) || '';
-          const rawVal = attrVal || txtVal;
-          const match = rawVal.match(/(-?\d+(?:[.,]\d{2}))/);
-          if (match) amountDue = parseFloat(match[1].replace(',', '.'));
-        }
-        if (amountDue === 0.0) {
-          const amountMatch = rowText.match(/(-?\d+(?:[.,]\d{2}))\s*(?:zł|PLN)/i);
-          if (amountMatch) {
-            amountDue = parseFloat(amountMatch[1].replace(',', '.'));
-          }
-        }
+        const attrVal = amountEl ? ((await amountEl.getAttribute('data-charge-value')) || (await amountEl.innerText().catch(() => ''))) : null;
+        const grossEl = await row.$('[data-param="AmountGross"], [data-param*="Amount"]');
+        const grossVal = grossEl ? (await grossEl.innerText().catch(() => '')) : null;
+        const amountDue = this.parseAmount(rowText, attrVal, grossVal);
 
         // Extract dates and status
         const extraDates = await row.evaluate((tr) => {
@@ -365,28 +405,8 @@ export class TauronProvider implements IBillProvider {
           continue;
         }
 
-        // Try downloading PDF invoice
-        let pdfBuffer: Buffer | undefined;
-        let pdfFileName: string | undefined;
-
-        const downloadBtn = await row.$(TAURON_CONFIG.selectors.downloadPdfBtn);
-        if (downloadBtn) {
-          try {
-            const [download] = await Promise.all([
-              page.waitForEvent('download', { timeout: 8000 }),
-              downloadBtn.click(),
-            ]);
-
-            const tempPath = await download.path();
-            if (tempPath) {
-              const fileContent = await fs.readFile(tempPath);
-              const safeInv = invoiceNumber.trim().replace(/[\r\n\t]+/g, '').replace(/[\/\\:]/g, '_');
-              pdfFileName = `Tauron_${safeInv}.pdf`;
-            }
-          } catch {
-            // PDF download timed out or unavailable, ignore
-          }
-        }
+        // Extract PDF invoice buffer (direct internal API fetch with download fallback)
+        const { pdfBuffer, pdfFileName } = await this.extractPdfForRow(page, row, invoiceNumber, context);
 
         let finalIban = bankAccountNumber;
         if (!finalIban && pdfBuffer) {
@@ -487,21 +507,11 @@ export class TauronProvider implements IBillProvider {
         seenInvoiceNumbers.add(invoiceNumber);
 
         // Extract amount
-        let amountDue = 0.0;
         const amountEl = await row.$('.amount, input[data-charge-value]');
-        if (amountEl) {
-          const attrVal = await amountEl.getAttribute('data-charge-value');
-          const txtVal = (await amountEl.innerText().catch(() => '')) || '';
-          const rawVal = attrVal || txtVal;
-          const match = rawVal.match(/(-?\d+(?:[.,]\d{2}))/);
-          if (match) amountDue = parseFloat(match[1].replace(',', '.'));
-        }
-        if (amountDue === 0.0) {
-          const amountMatch = rowText.match(/(-?\d+(?:[.,]\d{2}))\s*(?:zł|PLN)/i);
-          if (amountMatch) {
-            amountDue = parseFloat(amountMatch[1].replace(',', '.'));
-          }
-        }
+        const attrVal = amountEl ? ((await amountEl.getAttribute('data-charge-value')) || (await amountEl.innerText().catch(() => ''))) : null;
+        const grossEl = await row.$('[data-param="AmountGross"], [data-param*="Amount"]');
+        const grossVal = grossEl ? (await grossEl.innerText().catch(() => '')) : null;
+        const amountDue = this.parseAmount(rowText, attrVal, grossVal);
 
         // Extract dates and status
         const extraDates = await row.evaluate((tr) => {
@@ -532,28 +542,8 @@ export class TauronProvider implements IBillProvider {
           continue;
         }
 
-        // Try downloading PDF invoice
-        let pdfBuffer: Buffer | undefined;
-        let pdfFileName: string | undefined;
-
-        const downloadBtn = await row.$(TAURON_CONFIG.selectors.downloadPdfBtn);
-        if (downloadBtn) {
-          try {
-            const [download] = await Promise.all([
-              page.waitForEvent('download', { timeout: 8000 }),
-              downloadBtn.click(),
-            ]);
-
-            const tempPath = await download.path();
-            if (tempPath) {
-              const fileContent = await fs.readFile(tempPath);
-              const safeInv = invoiceNumber.trim().replace(/[\r\n\t]+/g, '').replace(/[\/\\:]/g, '_');
-              pdfFileName = `Tauron_${safeInv}.pdf`;
-            }
-          } catch {
-            // Download timed out or failed
-          }
-        }
+        // Extract PDF invoice buffer (direct internal API fetch with download fallback)
+        const { pdfBuffer, pdfFileName } = await this.extractPdfForRow(page, row, invoiceNumber, context);
 
         let finalIban = bankAccountNumber;
         if (clientNumber && clientToIban?.has(clientNumber)) {
@@ -591,6 +581,68 @@ export class TauronProvider implements IBillProvider {
         context.log.warn(`[TauronProvider] Error parsing row ${i}: ${err}`);
       }
     }
+  }
+
+  private async extractPdfForRow(
+    page: Page,
+    row: import('playwright').ElementHandle<SVGElement | HTMLElement>,
+    invoiceNumber: string,
+    context: ScrapeContext
+  ): Promise<{ pdfBuffer?: Buffer; pdfFileName?: string }> {
+    const safeInv = invoiceNumber.trim().replace(/[\r\n\t]+/g, '').replace(/[\/\\:]/g, '_');
+    const pdfFileName = `Tauron_${safeInv}.pdf`;
+
+    // 1. Try direct fetch from data-base attribute (Tauron internal API endpoint)
+    try {
+      const docLink = await row.$(TAURON_CONFIG.selectors.downloadPdfBtn);
+      if (docLink) {
+        const dataBase = await docLink.getAttribute('data-base');
+        if (dataBase) {
+          const docBase64 = await page.evaluate(async (url) => {
+            try {
+              const res = await fetch(url);
+              if (!res.ok) return null;
+              const json = await res.json();
+              return json && json.Document ? json.Document : null;
+            } catch {
+              return null;
+            }
+          }, dataBase);
+
+          if (docBase64 && typeof docBase64 === 'string' && docBase64.length > 50) {
+            const pdfBuffer = Buffer.from(docBase64, 'base64');
+            context.log.info(`[TauronProvider] Successfully extracted PDF via internal API for invoice ${invoiceNumber} (${pdfBuffer.length} bytes)`);
+            return { pdfBuffer, pdfFileName };
+          }
+        }
+      }
+    } catch (err) {
+      context.log.warn(`[TauronProvider] Direct PDF API fetch error for invoice ${invoiceNumber}: ${err}`);
+    }
+
+    // 2. Fallback to standard Playwright download click if available and visible
+    try {
+      const downloadBtn = await row.$(TAURON_CONFIG.selectors.downloadPdfBtn);
+      if (downloadBtn) {
+        const isVisible = await downloadBtn.isVisible().catch(() => false);
+        if (isVisible) {
+          const [download] = await Promise.all([
+            page.waitForEvent('download', { timeout: 6000 }),
+            downloadBtn.click(),
+          ]);
+
+          const tempPath = await download.path();
+          if (tempPath) {
+            const pdfBuffer = await fs.readFile(tempPath);
+            return { pdfBuffer, pdfFileName };
+          }
+        }
+      }
+    } catch {
+      // Ignore fallback failure
+    }
+
+    return {};
   }
 
   private async extractAccountSummary(page: Page): Promise<{ clientNumber?: string; accountName?: string; tariff?: string }> {
@@ -643,14 +695,16 @@ export class TauronProvider implements IBillProvider {
       if (!isNaN(daysAgo)) {
         const now = new Date();
         now.setHours(0, 0, 0, 0);
-        dueDate = new Date(now.getTime() - daysAgo * 86400000);
+        dueDate = new Date(now);
+        dueDate.setDate(dueDate.getDate() - daysAgo);
         dueDate.setHours(0, 0, 0, 0);
         isExplicitlyOverdue = true;
       }
     } else if (lowerText.includes('wczoraj minął termin') || lowerText.includes('termin minął wczoraj')) {
       const now = new Date();
       now.setHours(0, 0, 0, 0);
-      dueDate = new Date(now.getTime() - 86400000);
+      dueDate = new Date(now);
+      dueDate.setDate(dueDate.getDate() - 1);
       dueDate.setHours(0, 0, 0, 0);
       isExplicitlyOverdue = true;
     } else if (lowerText.includes('dzisiaj mija termin') || lowerText.includes('termin mija dzisiaj')) {
@@ -668,7 +722,8 @@ export class TauronProvider implements IBillProvider {
         if (!isNaN(daysAhead)) {
           const now = new Date();
           now.setHours(0, 0, 0, 0);
-          dueDate = new Date(now.getTime() + daysAhead * 86400000);
+          dueDate = new Date(now);
+          dueDate.setDate(dueDate.getDate() + daysAhead);
           dueDate.setHours(0, 0, 0, 0);
           isExplicitlyUpcoming = true;
         }
@@ -688,7 +743,8 @@ export class TauronProvider implements IBillProvider {
           dueDate.setHours(0, 0, 0, 0);
         } else {
           // Fallback: issueDate + 14 days
-          dueDate = new Date(issueDate.getTime() + 14 * 86400000);
+          dueDate = new Date(issueDate);
+          dueDate.setDate(dueDate.getDate() + 14);
           dueDate.setHours(0, 0, 0, 0);
         }
       }
@@ -716,6 +772,22 @@ export class TauronProvider implements IBillProvider {
     }
 
     return { issueDate, dueDate, paymentStatus };
+  }
+
+  public parseAmount(rowText: string, attrVal?: string | null, grossVal?: string | null): number {
+    if (attrVal) {
+      const match = attrVal.match(/(-?\d+(?:[.,]\d{1,2}))/);
+      if (match) return parseFloat(match[1].replace(',', '.'));
+    }
+    if (grossVal) {
+      const match = grossVal.match(/(-?\d+(?:[.,]\d{1,2})?)/);
+      if (match) return parseFloat(match[1].replace(',', '.'));
+    }
+    const amountMatch = rowText.match(/(-?\d+(?:[.,]\d{1,2}))\s*(?:zł|PLN)/i);
+    if (amountMatch) {
+      return parseFloat(amountMatch[1].replace(',', '.'));
+    }
+    return 0.0;
   }
 
   public parseDate(dateStr: string): Date {

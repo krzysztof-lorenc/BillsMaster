@@ -259,6 +259,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({ bill, onClose })
           data: new Uint8Array(arrayBuffer),
           cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version || '3.11.174'}/cmaps/`,
           cMapPacked: true,
+          isEvalSupported: false,
         });
 
         const doc = await loadingTask.promise;

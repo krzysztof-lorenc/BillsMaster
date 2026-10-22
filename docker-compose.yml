@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: billsmaster_pass
       POSTGRES_DB: billsmaster
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
     container_name: billsmaster-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -56,7 +56,7 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:5173}
     ports:
-      - "3005:3005"
+      - "127.0.0.1:3005:3005"
     volumes:
       - app_storage:/app/storage
 

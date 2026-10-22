@@ -72,7 +72,7 @@ export const mailScriptPublicRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // Ingest endpoint called by Google Apps Script with extracted email invoices
-  fastify.post<{ Body: MailScriptIngestRequest }>('/ingest', async (request, reply) => {
+  fastify.post<{ Body: MailScriptIngestRequest }>('/ingest', { bodyLimit: 50 * 1024 * 1024 }, async (request, reply) => {
     const clientIp = request.ip || request.headers['x-forwarded-for'] as string;
     const token = request.body?.secretToken || (request.headers['x-mail-script-token'] as string);
 

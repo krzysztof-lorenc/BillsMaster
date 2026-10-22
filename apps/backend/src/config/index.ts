@@ -29,6 +29,9 @@ const envSchema = z.object({
   STORAGE_DIR: z.string().default('./storage'),
   CORS_ORIGIN: z.string().default('http://localhost:5173,http://localhost:3000'),
   PLAYWRIGHT_HEADLESS: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(true),
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().default('mailto:admin@billsmaster.local'),
 });
 
 const parsed = envSchema.safeParse(process.env);

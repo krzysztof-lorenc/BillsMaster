@@ -4,13 +4,14 @@ dist
 *.log
 .DS_Store
 
-# Storage volumes
+# Storage volumes & persistent keys
 **/storage/invoices/*
 !**/storage/invoices/.gitkeep
 **/storage/sessions/*
 !**/storage/sessions/.gitkeep
 **/storage/data/*
 !**/storage/data/.gitkeep
+**/vapid.json
 
 # Playwright & test outputs
 test-results/

@@ -34,11 +34,13 @@
     "playwright": "^1.44.0",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "web-push": "^3.6.7",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.12.12",
+    "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
     "prisma": "^5.14.0",
     "tsx": "^4.10.5",

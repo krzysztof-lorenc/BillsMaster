@@ -21,6 +21,10 @@ export interface PortalDto {
   isMailScript?: boolean;
   senderFilter?: string | null;
   titleFilter?: string | null;
+  paymentReceiver?: string | null;
+  notifyNewBill: boolean;
+  notifyDueSoon: boolean;
+  notifyOverdue: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +42,10 @@ export interface CreatePortalRequest {
   isMailScript?: boolean;
   senderFilter?: string | null;
   titleFilter?: string | null;
+  paymentReceiver?: string | null;
+  notifyNewBill?: boolean;
+  notifyDueSoon?: boolean;
+  notifyOverdue?: boolean;
 }
 
 export interface UpdatePortalRequest {
@@ -53,6 +61,10 @@ export interface UpdatePortalRequest {
   isMailScript?: boolean;
   senderFilter?: string | null;
   titleFilter?: string | null;
+  paymentReceiver?: string | null;
+  notifyNewBill?: boolean;
+  notifyDueSoon?: boolean;
+  notifyOverdue?: boolean;
 }
 
 export interface DuplicatePortalRequest {
@@ -64,4 +76,8 @@ export interface DuplicatePortalRequest {
   senderFilter?: string | null;
   titleFilter?: string | null;
   category?: ProviderCategory;
+  paymentReceiver?: string | null;
+  notifyNewBill?: boolean;
+  notifyDueSoon?: boolean;
+  notifyOverdue?: boolean;
 }

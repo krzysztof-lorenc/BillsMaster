@@ -19,7 +19,8 @@ import {
 import { api } from '../../lib/api.js';
 import { 
   generateZbpQrString, 
-  validateAndParseNrb 
+  validateAndParseNrb,
+  formatZbpRecipient,
 } from '../../lib/zbpQr.js';
 import { formatCurrency, formatFullDate } from '../../lib/utils.js';
 import type { BillDto } from '@bills-master/shared-types';
@@ -30,6 +31,60 @@ interface PaymentQrModalProps {
   onBillUpdated?: (updatedBill: BillDto) => void;
 }
 
+/**
+ * Resolves the genuine recipient / seller / community name from the bill.
+ * Avoids using private portal nicknames (e.g. "Bystrzańska", "Dom") unless no other name is available.
+ */
+export function resolveBillRecipient(bill?: BillDto | null): string {
+  if (!bill) return 'Dostawca';
+
+  const meta = (bill.rawMetadata || {}) as Record<string, any>;
+
+  // 0. Configured portal payment receiver (configured in portal settings)
+  if (bill.portal?.paymentReceiver && bill.portal.paymentReceiver.trim()) {
+    return bill.portal.paymentReceiver.trim();
+  }
+
+  // 1. Explicit recipient from metadata
+  if (meta.recipient && typeof meta.recipient === 'string' && meta.recipient.trim()) {
+    return meta.recipient.trim();
+  }
+
+  // 2. Seller name / issuer from metadata
+  if (meta.sellerName && typeof meta.sellerName === 'string' && meta.sellerName.trim()) {
+    return meta.sellerName.trim();
+  }
+  if (meta.seller && typeof meta.seller === 'string' && meta.seller.trim()) {
+    return meta.seller.trim();
+  }
+
+  // 3. Housing community name (e.g. e-kartoteka: 'Wspólnota Mieszkaniowa "Lipowa Dolina" ul. Bystrzańska 15 b, 15 c')
+  if (meta.communityName && typeof meta.communityName === 'string' && meta.communityName.trim()) {
+    let clean = meta.communityName.trim();
+    clean = clean.replace(/[,;]?\s+(?:ul\.|al\.|pl\.|os\.)\s+.*$/i, '');
+    clean = clean.replace(/["”„«»]/g, '');
+    if (clean.trim()) return clean.trim();
+  }
+
+  // 4. Sender from email ingestion (e.g. "Canal+", "Vectra")
+  if (meta.sender && typeof meta.sender === 'string' && meta.sender.trim()) {
+    const senderClean = meta.sender.replace(/<.*?>/, '').replace(/["']/g, '').trim();
+    if (senderClean) return senderClean;
+  }
+
+  // 5. Provider display name (e.g. "Tauron", "Netia", "AQUA Bielsko-Biała", "Euro-lan")
+  if (bill.portal?.providerName && bill.portal.providerName.trim() && bill.portal.providerName !== 'Dostawca') {
+    return bill.portal.providerName.trim();
+  }
+
+  // 6. User's custom portal name (only as fallback)
+  if (bill.portal?.name && bill.portal.name.trim()) {
+    return bill.portal.name.trim();
+  }
+
+  return 'Dostawca';
+}
+
 export const PaymentQrModal: React.FC<PaymentQrModalProps> = ({ bill, onClose, onBillUpdated }) => {
   if (!bill) return null;
 
@@ -38,9 +93,7 @@ export const PaymentQrModal: React.FC<PaymentQrModalProps> = ({ bill, onClose, o
 
   // Editable fields in case user needs to adjust or missing account
   const [accountNumber, setAccountNumber] = useState<string>(bill.bankAccountNumber || '');
-  const [recipient, setRecipient] = useState<string>(
-    bill.portal?.name || bill.portal?.providerName || 'Dostawca'
-  );
+  const [recipient, setRecipient] = useState<string>(resolveBillRecipient(bill));
   const [title, setTitle] = useState<string>(bill.paymentTitle || bill.invoiceNumber || 'Opłata za rachunek');
   const [amount, setAmount] = useState<number>(bill.amountDue || 0);
   const [removePolish, setRemovePolish] = useState<boolean>(false);
@@ -52,7 +105,7 @@ export const PaymentQrModal: React.FC<PaymentQrModalProps> = ({ bill, onClose, o
     if (bill) {
       setCurrentBill(bill);
       setAccountNumber(bill.bankAccountNumber || '');
-      setRecipient(bill.portal?.name || bill.portal?.providerName || 'Dostawca');
+      setRecipient(resolveBillRecipient(bill));
       setTitle(bill.paymentTitle || bill.invoiceNumber || 'Opłata za rachunek');
       setAmount(bill.amountDue || 0);
     }
@@ -359,13 +412,13 @@ export const PaymentQrModal: React.FC<PaymentQrModalProps> = ({ bill, onClose, o
                 <div className="p-3 bg-slate-950/40 border border-slate-800/80 rounded-xl">
                   <span className="text-slate-400 block font-medium">Odbiorca:</span>
                   <span className="font-bold text-white truncate block mt-0.5" title={recipient}>
-                    {recipient.slice(0, 20)}
+                    {recipient}
                   </span>
                 </div>
                 <div className="p-3 bg-slate-950/40 border border-slate-800/80 rounded-xl">
                   <span className="text-slate-400 block font-medium">Tytuł przelewu:</span>
                   <span className="font-bold text-white truncate block mt-0.5" title={title}>
-                    {title.slice(0, 32)}
+                    {title}
                   </span>
                 </div>
               </div>
@@ -503,16 +556,21 @@ export const PaymentQrModal: React.FC<PaymentQrModalProps> = ({ bill, onClose, o
                   {/* Recipient */}
                   <div>
                     <div className="flex justify-between items-center mb-1">
-                      <label className="text-xs font-semibold text-slate-300">Odbiorca (maks. 20 znaków):</label>
-                      <span className="text-[11px] text-slate-500">{recipient.length}/20</span>
+                      <label className="text-xs font-semibold text-slate-300">Odbiorca:</label>
+                      <span className="text-[11px] text-slate-500">{recipient.length} zn.</span>
                     </div>
                     <input
                       type="text"
-                      maxLength={20}
+                      maxLength={70}
                       value={recipient}
                       onChange={(e) => setRecipient(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
                     />
+                    {recipient.length > 20 && (
+                      <span className="text-[11px] text-slate-400 block mt-1">
+                        W kodzie QR ZBP (maks. 20 zn.): <strong className="text-blue-400">{formatZbpRecipient(recipient)}</strong>
+                      </span>
+                    )}
                   </div>
 
                   {/* Amount */}

@@ -16,6 +16,7 @@ import { SyncService } from '../services/SyncService.js';
 import { BillService } from '../services/BillService.js';
 import { NightlyRefreshService } from '../services/NightlyRefreshService.js';
 import { MailScriptService } from '../services/MailScriptService.js';
+import { NotificationService } from '../services/NotificationService.js';
 import type { SyncStatus, SyncErrorDetails } from '@bills-master/shared-types';
 
 export function createSyncWorker() {
@@ -53,6 +54,19 @@ export function createSyncWorker() {
           return { queuedPortals: queued.length };
         }
         return { queuedPortals: 0 };
+      }
+
+      // Handle scheduled daily notifications digest (runs daily at 08:30 AM Warsaw time)
+      if (job.data?.isDailyNotificationScheduler || job.name === 'daily-notification-scheduler') {
+        logger.info('[Worker] ⏰ Running scheduled daily notifications digest (08:30 AM Warsaw time)...');
+        try {
+          const result = await NotificationService.runDailyNotificationDigest();
+          logger.info(`[Worker] ✅ Daily notifications digest completed: ${result.notificationsSent} notification(s) sent across ${result.usersProcessed} user(s).`);
+          return result;
+        } catch (err) {
+          logger.error('[Worker] ❌ Error running daily notifications digest:', err);
+          throw err;
+        }
       }
 
       const { portalId, syncJobId } = job.data;

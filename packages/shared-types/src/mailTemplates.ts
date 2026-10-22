@@ -7,5 +7,6 @@ export interface MailScriptTemplate {
   category: ProviderCategory;
   senderFilter: string;
   titleFilter: string;
+  paymentReceiver?: string;
   description?: string;
 }

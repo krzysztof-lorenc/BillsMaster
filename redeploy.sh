@@ -10,10 +10,15 @@ set -euo pipefail
 SCRIPT_REAL="$(readlink -f "${BASH_SOURCE[0]}")"
 REPO_ROOT="$(cd "$(dirname "${SCRIPT_REAL}")" && pwd)"
 
-# Load environment variables if .env exists
+# Load environment variables if .env exists safely without eval
 if [ -f "${REPO_ROOT}/.env" ]; then
-  # Read variables without executing arbitrary code
-  eval "$(grep -E '^(PUBLIC_URL|MISTRZOSK_URL|LOCAL_URL)=' "${REPO_ROOT}/.env" || true)"
+  while IFS='=' read -r key val || [ -n "$key" ]; do
+    case "$key" in
+      PUBLIC_URL) PUBLIC_URL="${val}" ;;
+      MISTRZOSK_URL) MISTRZOSK_URL="${val}" ;;
+      LOCAL_URL) LOCAL_URL="${val}" ;;
+    esac
+  done < <(grep -E '^(PUBLIC_URL|MISTRZOSK_URL|LOCAL_URL)=' "${REPO_ROOT}/.env" || true)
 fi
 
 PUBLIC_URL="${PUBLIC_URL:-http://127.0.0.1:3000}"
@@ -93,6 +98,7 @@ show_logs() {
 # Health & End-to-End Verification Suite
 verify_health() {
   log_info "Running post-deployment verification..."
+  sleep 2
 
   echo -n "  1. Local Frontend Port (:3000): "
   local local_title

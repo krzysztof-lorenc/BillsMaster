@@ -7,3 +7,4 @@ export * from './sync.js';
 export * from './group.js';
 export * from './mailScript.js';
 export * from './mailTemplates.js';
+export * from './notification.js';

@@ -140,6 +140,34 @@ export function sanitizeZbpField(val: string | null | undefined, maxLength: numb
 }
 
 /**
+ * Formats recipient name to strictly fit within the 20-character ZBP standard limit
+ * while keeping distinctive identifying names (e.g. "Wspólnota Mieszkaniowa Lipowa Dolina" -> "WM Lipowa Dolina").
+ */
+export function formatZbpRecipient(name?: string | null): string {
+  if (!name) return '';
+  let clean = name.trim().replace(/["”„«»]/g, '');
+
+  if (clean.length <= 20) return clean;
+
+  // Use common Polish organizational abbreviations first
+  let abbreviated = clean
+    .replace(/^Wspólnota\s+Mieszkaniowa(?:\s+|$)/i, 'WM ')
+    .replace(/^Wspolnota\s+Mieszkaniowa(?:\s+|$)/i, 'WM ')
+    .replace(/^Spółdzielnia\s+Mieszkaniowa(?:\s+|$)/i, 'SM ')
+    .replace(/^Spoldzielnia\s+Mieszkaniowa(?:\s+|$)/i, 'SM ')
+    .replace(/^Przedsiębiorstwo\s+/i, 'Przedsiebiorstwo ')
+    .trim();
+
+  if (abbreviated.length <= 20) return abbreviated;
+
+  // If still too long, strip trailing street prefix/address
+  abbreviated = abbreviated.replace(/[,;]?\s+(?:ul\.|al\.|pl\.|os\.)\s+.*$/i, '').trim();
+
+  if (abbreviated.length <= 20) return abbreviated;
+  return abbreviated.slice(0, 20).trim();
+}
+
+/**
  * Builds the standard ZBP QR code string for Polish banking apps
  */
 export function generateZbpQrString(params: ZbpQrParams): string {
@@ -150,7 +178,8 @@ export function generateZbpQrString(params: ZbpQrParams): string {
   const amountStr = String(grosze).padStart(6, '0');
 
   const nip = params.nip ? params.nip.replace(/\D/g, '').slice(0, 10) : '';
-  const recipient = sanitizeZbpField(params.recipient, 20, params.removePolishChars);
+  const formattedRecipient = formatZbpRecipient(params.recipient);
+  const recipient = sanitizeZbpField(formattedRecipient, 20, params.removePolishChars);
   const title = sanitizeZbpField(params.title, 32, params.removePolishChars);
 
   // 9 fields separated by '|':

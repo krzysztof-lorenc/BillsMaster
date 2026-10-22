@@ -7,6 +7,7 @@ export interface SyncJobData {
   syncJobId?: string;
   isDailyScheduler?: boolean;
   isIntradayScheduler?: boolean;
+  isDailyNotificationScheduler?: boolean;
   frequencies?: number[];
 }
 
@@ -106,6 +107,21 @@ export async function setupDailySyncScheduler(): Promise<void> {
       }
     );
 
+    logger.info('[Queue] Configuring daily 08:30 AM notification digest scheduler (Europe/Warsaw)...');
+    await syncQueue.upsertJobScheduler(
+      'daily-notifications-digest',
+      {
+        pattern: '30 8 * * *',
+        tz: 'Europe/Warsaw',
+      },
+      {
+        name: 'daily-notification-scheduler',
+        data: {
+          isDailyNotificationScheduler: true,
+        },
+      }
+    );
+
     const schedulers = await syncQueue.getJobSchedulers();
     const dailySched = schedulers.find((s) => s.key === 'daily-3am-sync');
     if (dailySched && dailySched.next) {
@@ -119,6 +135,12 @@ export async function setupDailySyncScheduler(): Promise<void> {
     if (intradaySched && intradaySched.next) {
       const nextDate = new Date(intradaySched.next).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
       logger.info(`⏰ Intraday refresh scheduled successfully. Next execution: ${nextDate} (Warsaw time)`);
+    }
+
+    const notifSched = schedulers.find((s) => s.key === 'daily-notifications-digest');
+    if (notifSched && notifSched.next) {
+      const nextDate = new Date(notifSched.next).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+      logger.info(`⏰ Daily notifications digest scheduled successfully. Next execution: ${nextDate} (Warsaw time)`);
     }
   } catch (err) {
     logger.error('[Queue] Error setting up sync schedulers:', err);
