@@ -34,6 +34,8 @@ import {
 import type { BillDto, UserGroupInfo } from '@bills-master/shared-types';
 import { PaymentQrModal } from '../components/bills/PaymentQrModal.js';
 import { PdfViewerModal } from '../components/bills/PdfViewerModal.js';
+import { downloadBillQrCode } from '../lib/qrDownload.js';
+import { validateAndParseNrb } from '../lib/zbpQr.js';
 
 const FILTER_OPTIONS = [
   { id: 'PAY_30', label: 'Do zapłaty w 30 dni' },
@@ -58,6 +60,7 @@ export const BillsHistoryPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadingQrId, setDownloadingQrId] = useState<string | null>(null);
   const [selectedQrBill, setSelectedQrBill] = useState<BillDto | null>(null);
   const [selectedPdfBill, setSelectedPdfBill] = useState<BillDto | null>(null);
   const [togglingBillId, setTogglingBillId] = useState<string | null>(null);
@@ -160,6 +163,17 @@ export const BillsHistoryPage: React.FC = () => {
       alert(err.message || 'Nie udało się pobrać pliku faktury.');
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const handleDownloadQr = async (bill: BillDto) => {
+    setDownloadingQrId(bill.id);
+    try {
+      await downloadBillQrCode(bill);
+    } catch (err: any) {
+      alert(err.message || 'Nie udało się pobrać kodu QR.');
+    } finally {
+      setDownloadingQrId(null);
     }
   };
 
@@ -355,6 +369,9 @@ export const BillsHistoryPage: React.FC = () => {
               bill.portal?.isMailScript ||
               bill.portal?.providerId === 'mail-script' ||
               (bill.rawMetadata as any)?.source === 'GOOGLE_APPS_SCRIPT'
+            );
+            const hasValidAccount = Boolean(
+              bill.bankAccountNumber && validateAndParseNrb(bill.bankAccountNumber).isValidLength
             );
 
             // Card border and background color based on status
@@ -566,18 +583,36 @@ export const BillsHistoryPage: React.FC = () => {
                       </div>
                     )}
 
-                    <button
-                      onClick={() => setSelectedQrBill(bill)}
-                      className={`flex-1 py-3.5 px-4 ${
-                        isLight
-                          ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300 shadow-sm'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700/80 shadow-sm'
-                      } font-bold rounded-2xl text-sm sm:text-base transition-all flex items-center justify-center gap-2.5 border active:scale-[0.99]`}
-                      title="Pokaż kod QR do płatności bankowej"
-                    >
-                      <QrCode className={`w-5 h-5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`} />
-                      <span>Płatność QR</span>
-                    </button>
+                    <div className="flex items-center gap-2 flex-1">
+                      <button
+                        onClick={() => setSelectedQrBill(bill)}
+                        className={`flex-1 py-3.5 px-4 ${
+                          isLight
+                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300 shadow-sm'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700/80 shadow-sm'
+                        } font-bold rounded-2xl text-sm sm:text-base transition-all flex items-center justify-center gap-2.5 border active:scale-[0.99]`}
+                        title="Pokaż kod QR do płatności bankowej"
+                      >
+                        <QrCode className={`w-5 h-5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`} />
+                        <span>Płatność QR</span>
+                      </button>
+                      <button
+                        onClick={() => handleDownloadQr(bill)}
+                        disabled={downloadingQrId === bill.id || !hasValidAccount}
+                        className={`py-3.5 px-3.5 ${
+                          isLight
+                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 shadow-sm'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700/80 shadow-sm'
+                        } font-bold rounded-2xl text-sm transition-all flex items-center justify-center border disabled:opacity-50`}
+                        title={hasValidAccount ? 'Pobierz kod QR płatności (obraz PNG)' : 'Brak numeru konta bankowego do wygenerowania kodu QR'}
+                      >
+                        {downloadingQrId === bill.id ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex flex-row items-stretch gap-1.5 sm:gap-2">

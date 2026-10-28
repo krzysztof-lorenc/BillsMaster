@@ -24,65 +24,14 @@ import {
 } from '../../lib/zbpQr.js';
 import { formatCurrency, formatFullDate } from '../../lib/utils.js';
 import type { BillDto } from '@bills-master/shared-types';
+import { resolveBillRecipient } from '../../lib/qrDownload.js';
+
+export { resolveBillRecipient };
 
 interface PaymentQrModalProps {
   bill: BillDto | null;
   onClose: () => void;
   onBillUpdated?: (updatedBill: BillDto) => void;
-}
-
-/**
- * Resolves the genuine recipient / seller / community name from the bill.
- * Avoids using private portal nicknames (e.g. "Bystrzańska", "Dom") unless no other name is available.
- */
-export function resolveBillRecipient(bill?: BillDto | null): string {
-  if (!bill) return 'Dostawca';
-
-  const meta = (bill.rawMetadata || {}) as Record<string, any>;
-
-  // 0. Configured portal payment receiver (configured in portal settings)
-  if (bill.portal?.paymentReceiver && bill.portal.paymentReceiver.trim()) {
-    return bill.portal.paymentReceiver.trim();
-  }
-
-  // 1. Explicit recipient from metadata
-  if (meta.recipient && typeof meta.recipient === 'string' && meta.recipient.trim()) {
-    return meta.recipient.trim();
-  }
-
-  // 2. Seller name / issuer from metadata
-  if (meta.sellerName && typeof meta.sellerName === 'string' && meta.sellerName.trim()) {
-    return meta.sellerName.trim();
-  }
-  if (meta.seller && typeof meta.seller === 'string' && meta.seller.trim()) {
-    return meta.seller.trim();
-  }
-
-  // 3. Housing community name (e.g. e-kartoteka: 'Wspólnota Mieszkaniowa "Lipowa Dolina" ul. Bystrzańska 15 b, 15 c')
-  if (meta.communityName && typeof meta.communityName === 'string' && meta.communityName.trim()) {
-    let clean = meta.communityName.trim();
-    clean = clean.replace(/[,;]?\s+(?:ul\.|al\.|pl\.|os\.)\s+.*$/i, '');
-    clean = clean.replace(/["”„«»]/g, '');
-    if (clean.trim()) return clean.trim();
-  }
-
-  // 4. Sender from email ingestion (e.g. "Canal+", "Vectra")
-  if (meta.sender && typeof meta.sender === 'string' && meta.sender.trim()) {
-    const senderClean = meta.sender.replace(/<.*?>/, '').replace(/["']/g, '').trim();
-    if (senderClean) return senderClean;
-  }
-
-  // 5. Provider display name (e.g. "Tauron", "Netia", "AQUA Bielsko-Biała", "Euro-lan")
-  if (bill.portal?.providerName && bill.portal.providerName.trim() && bill.portal.providerName !== 'Dostawca') {
-    return bill.portal.providerName.trim();
-  }
-
-  // 6. User's custom portal name (only as fallback)
-  if (bill.portal?.name && bill.portal.name.trim()) {
-    return bill.portal.name.trim();
-  }
-
-  return 'Dostawca';
 }
 
 export const PaymentQrModal: React.FC<PaymentQrModalProps> = ({ bill, onClose, onBillUpdated }) => {
